@@ -11,7 +11,7 @@ namespace AndroidBackpackPaging
 {
     public class ModEntry : Mod
     {
-        private Texture2D customBackpackTexture;
+        private Texture2D greenBackpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
         public override void Entry(IModHelper helper)
@@ -20,58 +20,67 @@ namespace AndroidBackpackPaging
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
-            try
+            // Buat Sprite Tas Hijau Terang Murni Otomatis
+            greenBackpackTexture = CreateGreenBackpackTexture();
+        }
+
+        // Generator Pixel Art Tas Hijau Asli (Dijamin Hijau Cerah)
+        private Texture2D CreateGreenBackpackTexture()
+        {
+            Texture2D tex = new Texture2D(Game1.graphics.GraphicsDevice, 12, 14);
+            Color G = new Color(80, 210, 60);   // Hijau Terang Cerah
+            Color D = new Color(25, 90, 18);    // Hijau Tua (Garis Tepi)
+            Color Y = new Color(255, 220, 0);   // Emas / Gesper
+            Color O = new Color(230, 120, 30);  // Aksen Tali
+            Color _ = Color.Transparent;
+
+            Color[] pixels = new Color[]
             {
-                customBackpackTexture = helper.ModContent.Load<Texture2D>("backpack.png");
-            }
-            catch
-            {
-                customBackpackTexture = null;
-            }
+                _, _, D, D, _, _, _, _, D, D, _, _,
+                _, D, G, G, D, _, _, D, G, G, D, _,
+                D, G, G, G, G, D, D, G, G, G, G, D,
+                D, G, G, G, G, G, G, G, G, G, G, D,
+                D, G, G, G, G, G, G, G, G, G, G, D,
+                D, G, G, G, G, G, G, G, G, G, G, D,
+                D, D, D, D, D, D, D, D, D, D, D, D,
+                D, G, G, G, G, Y, Y, G, G, G, G, D,
+                D, G, G, G, G, Y, O, G, G, G, G, D,
+                D, G, G, G, G, O, O, G, G, G, G, D,
+                D, G, G, G, G, G, G, G, G, G, G, D,
+                D, G, G, G, G, G, G, G, G, G, G, D,
+                _, D, G, G, G, G, G, G, G, G, D, _,
+                _, _, D, D, D, D, D, D, D, D, _, _
+            };
+
+            tex.SetData(pixels);
+            return tex;
         }
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Tampilkan TAS HIJAU di meja Pierre jika pemain masih punya 36 slot (belum 48 slot)
+            // Gambar TAS HIJAU CERAH di atas meja kasir Pierre
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 10, 18 * 64 - 36);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
-                if (customBackpackTexture != null)
-                {
-                    e.SpriteBatch.Draw(
-                        customBackpackTexture,
-                        screenPos,
-                        null,
-                        Color.White,
-                        0f,
-                        Vector2.Zero,
-                        4f,
-                        SpriteEffects.None,
-                        0.86f
-                    );
-                }
-                else
-                {
-                    e.SpriteBatch.Draw(
-                        Game1.mouseCursors,
-                        screenPos,
-                        new Rectangle(257, 1436, 11, 13),
-                        new Color(60, 240, 80),
-                        0f,
-                        Vector2.Zero,
-                        4f,
-                        SpriteEffects.None,
-                        0.86f
-                    );
-                }
+                e.SpriteBatch.Draw(
+                    greenBackpackTexture,
+                    screenPos,
+                    null,
+                    Color.White,
+                    0f,
+                    Vector2.Zero,
+                    4f,
+                    SpriteEffects.None,
+                    0.86f
+                );
             }
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            // GAMBAR BARIS KE-4 YANG GELAP & TERKUNCI DI MENU TAS (Sebelum dibeli)
+            // GAMBAR BARIS KE-4 YANG RAPI & TIDAK MENABRAK PROFIL
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
             {
                 if (Game1.player.MaxItems == 36)
@@ -81,26 +90,50 @@ namespace AndroidBackpackPaging
                         var invMenu = invPage.inventory;
                         if (invMenu != null && invMenu.inventory.Count >= 36)
                         {
-                            // Hitung jarak vertikal antar baris slot
                             int rowHeight = invMenu.inventory[12].bounds.Y - invMenu.inventory[0].bounds.Y;
+                            
+                            // Offset disesuaikan agar posisinya rapat dan tidak menabrak teks nama karakter di bawah
+                            int offsetY = rowHeight - 6;
 
-                            // Gambar 12 slot baris ke-4 dengan warna gelap/transparan
+                            // 1. Gambar background kotak krem agar menyatu dengan menu atas
+                            var firstSlot = invMenu.inventory[24];
+                            var lastSlot = invMenu.inventory[35];
+                            Rectangle bgPanel = new Rectangle(
+                                firstSlot.bounds.X - 8,
+                                firstSlot.bounds.Y + offsetY - 4,
+                                (lastSlot.bounds.X + lastSlot.bounds.Width) - firstSlot.bounds.X + 16,
+                                rowHeight + 8
+                            );
+
+                            IClickableMenu.drawTextureBox(
+                                e.SpriteBatch,
+                                Game1.menuTexture,
+                                new Rectangle(0, 256, 60, 60),
+                                bgPanel.X,
+                                bgPanel.Y,
+                                bgPanel.Width,
+                                bgPanel.Height,
+                                new Color(245, 207, 148), // Warna krem menu Stardew
+                                1f,
+                                false
+                            );
+
+                            // 2. Gambar 12 slot baris ke-4 terkunci/gelap
                             for (int i = 0; i < 12; i++)
                             {
                                 var row3Slot = invMenu.inventory[24 + i];
-                                Rectangle row4SlotBounds = new Rectangle(
+                                Rectangle row4Slot = new Rectangle(
                                     row3Slot.bounds.X,
-                                    row3Slot.bounds.Y + rowHeight,
+                                    row3Slot.bounds.Y + offsetY,
                                     row3Slot.bounds.Width,
                                     row3Slot.bounds.Height
                                 );
 
-                                // Kotak slot baris ke-4 gelap (Terkunci)
                                 e.SpriteBatch.Draw(
                                     Game1.menuTexture,
-                                    row4SlotBounds,
+                                    row4Slot,
                                     new Rectangle(128, 128, 64, 64),
-                                    Color.Black * 0.45f
+                                    Color.Black * 0.40f
                                 );
                             }
                         }
@@ -143,11 +176,11 @@ namespace AndroidBackpackPaging
                                         {
                                             farmer.Money -= UPGRADE_PRICE;
 
-                                            // BUKA & AKTIFKAN BARIS KE-4 (48 SLOT)
+                                            // AKTIFKAN 48 SLOT PENUH
                                             farmer.MaxItems = 48;
 
                                             Game1.playSound("reward");
-                                            Game1.showGlobalMessage("Peningkatan Tas Selesai! Baris ke-4 (48 Slot) berhasil terbuka.");
+                                            Game1.showGlobalMessage("Peningkatan Tas Selesai! Tas kamu sekarang 4 Baris (48 Slot).");
                                         }
                                         else
                                         {
