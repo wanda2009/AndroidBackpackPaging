@@ -5,33 +5,21 @@ using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Menus;
 
 namespace AndroidBackpackPaging
 {
-    public class ModSaveData
-    {
-        public bool HasBoughtBackpack48 { get; set; } = false;
-        public List<Item> BackpackMain_Items { get; set; } = new List<Item>();
-        public List<Item> BackpackExtra12_Items { get; set; } = new List<Item>();
-    }
-
     public class ModEntry : Mod
     {
-        private ModSaveData saveData = new ModSaveData();
-        private int currentPage = 1;
-        private Rectangle switchButtonBounds;
         private Texture2D customBackpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
         public override void Entry(IModHelper helper)
         {
-            helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-            helper.Events.GameLoop.Saving += OnSaving;
-            helper.Events.Display.RenderedHud += OnRenderedHud;
             helper.Events.Display.RenderedWorld += OnRenderedWorld;
+            helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
-            // Muat gambar tas hijau asli (backpack.png)
             try
             {
                 customBackpackTexture = helper.ModContent.Load<Texture2D>("backpack.png");
@@ -42,30 +30,16 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
-        {
-            saveData = Helper.Data.ReadSaveData<ModSaveData>("AndroidBackpack48Data") ?? new ModSaveData();
-            switchButtonBounds = new Rectangle(85, 20, 65, 65);
-            currentPage = 1;
-        }
-
-        private void OnSaving(object sender, SavingEventArgs e)
-        {
-            Helper.Data.WriteSaveData("AndroidBackpack48Data", saveData);
-        }
-
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Gambar TAS HIJAU tepat di atas meja kasir Pierre
-            if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems >= 36 && !saveData.HasBoughtBackpack48)
+            // Tampilkan TAS HIJAU di meja Pierre jika pemain masih punya 36 slot (belum 48 slot)
+            if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
-                // Posisi pixel yang presisi pas di atas meja kasir
                 Vector2 worldPos = new Vector2(7 * 64 + 10, 18 * 64 - 36);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
                 if (customBackpackTexture != null)
                 {
-                    // Gambar memakai tekstur asli Bigger Backpack
                     e.SpriteBatch.Draw(
                         customBackpackTexture,
                         screenPos,
@@ -80,12 +54,11 @@ namespace AndroidBackpackPaging
                 }
                 else
                 {
-                    // Fallback jika file png tidak ada
                     e.SpriteBatch.Draw(
                         Game1.mouseCursors,
                         screenPos,
                         new Rectangle(257, 1436, 11, 13),
-                        new Color(50, 220, 80),
+                        new Color(60, 240, 80),
                         0f,
                         Vector2.Zero,
                         4f,
@@ -96,14 +69,54 @@ namespace AndroidBackpackPaging
             }
         }
 
+        private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
+        {
+            // GAMBAR BARIS KE-4 YANG GELAP & TERKUNCI DI MENU TAS (Sebelum dibeli)
+            if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
+            {
+                if (Game1.player.MaxItems == 36)
+                {
+                    if (gameMenu.GetCurrentPage() is InventoryPage invPage)
+                    {
+                        var invMenu = invPage.inventory;
+                        if (invMenu != null && invMenu.inventory.Count >= 36)
+                        {
+                            // Hitung jarak vertikal antar baris slot
+                            int rowHeight = invMenu.inventory[12].bounds.Y - invMenu.inventory[0].bounds.Y;
+
+                            // Gambar 12 slot baris ke-4 dengan warna gelap/transparan
+                            for (int i = 0; i < 12; i++)
+                            {
+                                var row3Slot = invMenu.inventory[24 + i];
+                                Rectangle row4SlotBounds = new Rectangle(
+                                    row3Slot.bounds.X,
+                                    row3Slot.bounds.Y + rowHeight,
+                                    row3Slot.bounds.Width,
+                                    row3Slot.bounds.Height
+                                );
+
+                                // Kotak slot baris ke-4 gelap (Terkunci)
+                                e.SpriteBatch.Draw(
+                                    Game1.menuTexture,
+                                    row4SlotBounds,
+                                    new Rectangle(128, 128, 64, 64),
+                                    Color.Black * 0.45f
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
         {
             if (!Context.IsWorldReady) return;
 
             if (e.Button == SButton.MouseLeft)
             {
-                // 1. Interaksi saat memencet tas hijau di meja kasir Pierre
-                if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems >= 36 && !saveData.HasBoughtBackpack48)
+                // Beli tas 48 slot saat memencet tas hijau di meja Pierre
+                if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
                 {
                     Vector2 clickedTile = e.Cursor.Tile;
 
@@ -129,96 +142,23 @@ namespace AndroidBackpackPaging
                                         if (farmer.Money >= UPGRADE_PRICE)
                                         {
                                             farmer.Money -= UPGRADE_PRICE;
-                                            saveData.HasBoughtBackpack48 = true;
+
+                                            // BUKA & AKTIFKAN BARIS KE-4 (48 SLOT)
+                                            farmer.MaxItems = 48;
+
                                             Game1.playSound("reward");
-                                            Game1.showGlobalMessage("Peningkatan Tas Selesai! Kamu sekarang memiliki 48 Slot.");
+                                            Game1.showGlobalMessage("Peningkatan Tas Selesai! Baris ke-4 (48 Slot) berhasil terbuka.");
                                         }
                                         else
                                         {
-                                            Game1.drawObjectDialogue("Uangmu tidak cukup.");
+                                            Game1.drawObjectDialogue("Uangmu tidak cukup (Butuh 50.000g).");
                                         }
                                     }
                                 })
                             );
-                            return;
                         }
                     }
                 }
-
-                // 2. Tombol ganti tas (P1 <-> +12)
-                if (saveData.HasBoughtBackpack48)
-                {
-                    Point touchPos = Game1.getMousePosition();
-                    if (switchButtonBounds.Contains(touchPos) && Game1.activeClickableMenu == null)
-                    {
-                        Helper.Input.Suppress(e.Button);
-                        SwapInventory48();
-                    }
-                }
-            }
-        }
-
-        private void SwapInventory48()
-        {
-            Game1.playSound("shwip");
-
-            if (currentPage == 1)
-            {
-                saveData.BackpackMain_Items = new List<Item>(Game1.player.Items);
-
-                Game1.player.Items.Clear();
-                for (int i = 0; i < 12; i++)
-                {
-                    if (i < saveData.BackpackExtra12_Items.Count && saveData.BackpackExtra12_Items[i] != null)
-                        Game1.player.Items.Add(saveData.BackpackExtra12_Items[i]);
-                    else
-                        Game1.player.Items.Add(null);
-                }
-
-                currentPage = 2;
-                Game1.showGlobalMessage("Tas Ekstra: 12 Slot Tambahan");
-            }
-            else
-            {
-                saveData.BackpackExtra12_Items = new List<Item>();
-                for (int i = 0; i < 12; i++)
-                {
-                    if (i < Game1.player.Items.Count)
-                        saveData.BackpackExtra12_Items.Add(Game1.player.Items[i]);
-                    else
-                        saveData.BackpackExtra12_Items.Add(null);
-                }
-
-                Game1.player.Items.Clear();
-                for (int i = 0; i < 36; i++)
-                {
-                    if (i < saveData.BackpackMain_Items.Count && saveData.BackpackMain_Items[i] != null)
-                        Game1.player.Items.Add(saveData.BackpackMain_Items[i]);
-                    else
-                        Game1.player.Items.Add(null);
-                }
-
-                currentPage = 1;
-                Game1.showGlobalMessage("Tas Utama: 36 Slot");
-            }
-        }
-
-        private void OnRenderedHud(object sender, RenderedHudEventArgs e)
-        {
-            if (Context.IsWorldReady && saveData.HasBoughtBackpack48 && Game1.activeClickableMenu == null)
-            {
-                e.SpriteBatch.Draw(Game1.staminaRect, switchButtonBounds, Color.Black * 0.65f);
-
-                string text = (currentPage == 1) ? "P1" : "+12";
-                Color textColor = (currentPage == 1) ? Color.Gold : Color.LimeGreen;
-
-                Vector2 textSize = Game1.smallFont.MeasureString(text);
-                Vector2 textPos = new Vector2(
-                    switchButtonBounds.X + (switchButtonBounds.Width - textSize.X) / 2,
-                    switchButtonBounds.Y + (switchButtonBounds.Height - textSize.Y) / 2
-                );
-
-                e.SpriteBatch.DrawString(Game1.smallFont, text, textPos, textColor);
             }
         }
     }
