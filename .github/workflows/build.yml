@@ -14,5 +14,15 @@ jobs:
     - name: Build mod
       run: dotnet build -c Release
 
-    - name: Upload artifacts
-      uses: Pathoschild/SMAPI-ModBuildWorkflow/upload-release-artifacts@v1
+    - name: Package Mod Zip
+      run: |
+        mkdir -p ./Package/AndroidBackpackPaging
+        cp bin/Release/net6.0/AndroidBackpackPaging.dll ./Package/AndroidBackpackPaging/
+        cp manifest.json ./Package/AndroidBackpackPaging/
+        cd Package && zip -r ../AndroidBackpackPaging.zip AndroidBackpackPaging
+
+    - name: Upload Mod Zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: AndroidBackpackPaging-Mod
+        path: AndroidBackpackPaging.zip
