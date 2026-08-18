@@ -20,6 +20,7 @@ namespace AndroidBackpackPaging
         private ModSaveData saveData = new ModSaveData();
         private int currentPage = 1;
         private Rectangle switchButtonBounds;
+        private Texture2D customBackpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
         public override void Entry(IModHelper helper)
@@ -29,6 +30,16 @@ namespace AndroidBackpackPaging
             helper.Events.Display.RenderedHud += OnRenderedHud;
             helper.Events.Display.RenderedWorld += OnRenderedWorld;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
+
+            // Muat gambar tas hijau asli (backpack.png)
+            try
+            {
+                customBackpackTexture = helper.ModContent.Load<Texture2D>("backpack.png");
+            }
+            catch
+            {
+                customBackpackTexture = null;
+            }
         }
 
         private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
@@ -45,23 +56,43 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Gambar TAS HIJAU 48 SLOT di meja Pierre jika belum dibeli
+            // Gambar TAS HIJAU tepat di atas meja kasir Pierre
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems >= 36 && !saveData.HasBoughtBackpack48)
             {
-                Vector2 worldPos = new Vector2(7 * 64 + 10, 18 * 64 - 12);
+                // Posisi pixel yang presisi pas di atas meja kasir
+                Vector2 worldPos = new Vector2(7 * 64 + 10, 18 * 64 - 36);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
-                e.SpriteBatch.Draw(
-                    Game1.mouseCursors,
-                    screenPos,
-                    new Rectangle(257, 1436, 11, 13),
-                    new Color(50, 220, 80), // Warna Tas Hijau
-                    0f,
-                    Vector2.Zero,
-                    4.2f,
-                    SpriteEffects.None,
-                    0.85f
-                );
+                if (customBackpackTexture != null)
+                {
+                    // Gambar memakai tekstur asli Bigger Backpack
+                    e.SpriteBatch.Draw(
+                        customBackpackTexture,
+                        screenPos,
+                        null,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        4f,
+                        SpriteEffects.None,
+                        0.86f
+                    );
+                }
+                else
+                {
+                    // Fallback jika file png tidak ada
+                    e.SpriteBatch.Draw(
+                        Game1.mouseCursors,
+                        screenPos,
+                        new Rectangle(257, 1436, 11, 13),
+                        new Color(50, 220, 80),
+                        0f,
+                        Vector2.Zero,
+                        4f,
+                        SpriteEffects.None,
+                        0.86f
+                    );
+                }
             }
         }
 
@@ -71,7 +102,7 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                // 1. Klik Tas Hijau di Meja Kasir Pierre untuk beli 48 Slot
+                // 1. Interaksi saat memencet tas hijau di meja kasir Pierre
                 if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems >= 36 && !saveData.HasBoughtBackpack48)
                 {
                     Vector2 clickedTile = e.Cursor.Tile;
@@ -88,7 +119,6 @@ namespace AndroidBackpackPaging
                                 new Response("NotNow", "Nanti saja")
                             };
 
-                            // Kotak dialog persis foto
                             Game1.currentLocation.createQuestionDialogue(
                                 "Peningkatan Tas -- 48 slot",
                                 responses,
@@ -115,7 +145,7 @@ namespace AndroidBackpackPaging
                     }
                 }
 
-                // 2. Tombol di layar untuk menukar tas (36 Utama <-> 12 Ekstra)
+                // 2. Tombol ganti tas (P1 <-> +12)
                 if (saveData.HasBoughtBackpack48)
                 {
                     Point touchPos = Game1.getMousePosition();
@@ -134,10 +164,8 @@ namespace AndroidBackpackPaging
 
             if (currentPage == 1)
             {
-                // Simpan 36 Slot Utama
                 saveData.BackpackMain_Items = new List<Item>(Game1.player.Items);
 
-                // Muat 12 Slot Tambahan (Slot 37-48)
                 Game1.player.Items.Clear();
                 for (int i = 0; i < 12; i++)
                 {
@@ -148,11 +176,10 @@ namespace AndroidBackpackPaging
                 }
 
                 currentPage = 2;
-                Game1.showGlobalMessage("Tas Ekstra: 12 Slot Tambahan (Slot 37 - 48)");
+                Game1.showGlobalMessage("Tas Ekstra: 12 Slot Tambahan");
             }
             else
             {
-                // Simpan 12 Slot Tambahan
                 saveData.BackpackExtra12_Items = new List<Item>();
                 for (int i = 0; i < 12; i++)
                 {
@@ -162,7 +189,6 @@ namespace AndroidBackpackPaging
                         saveData.BackpackExtra12_Items.Add(null);
                 }
 
-                // Kembalikan 36 Slot Utama
                 Game1.player.Items.Clear();
                 for (int i = 0; i < 36; i++)
                 {
@@ -173,13 +199,12 @@ namespace AndroidBackpackPaging
                 }
 
                 currentPage = 1;
-                Game1.showGlobalMessage("Tas Utama: 36 Slot (Slot 1 - 36)");
+                Game1.showGlobalMessage("Tas Utama: 36 Slot");
             }
         }
 
         private void OnRenderedHud(object sender, RenderedHudEventArgs e)
         {
-            // Tombol [P1] / [+12] hanya muncul setelah tas 48 slot dibeli
             if (Context.IsWorldReady && saveData.HasBoughtBackpack48 && Game1.activeClickableMenu == null)
             {
                 e.SpriteBatch.Draw(Game1.staminaRect, switchButtonBounds, Color.Black * 0.65f);
