@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -22,17 +23,16 @@ namespace AndroidBackpackPaging
             helper.Events.GameLoop.Saving += OnSaving;
             helper.Events.Display.RenderedHud += OnRenderedHud;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
-            helper.Events.Display.MenuChanged += OnMenuChanged;
         }
 
         private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
         {
             hasBoughtUpgrade = Helper.Data.ReadSaveData<bool>("HasBoughtBackpackPage2");
             var savedItems = Helper.Data.ReadSaveData<List<Item>>("BackpackPage2_Items");
-            if (savedItems != null)
-                page2Items = savedItems;
+            page2Items = savedItems ?? new List<Item>();
 
-            switchButtonBounds = new Rectangle(20, 180, 70, 70);
+            // Posisi tombol [P1/P2] di layar HP
+            switchButtonBounds = new Rectangle(20, 180, 75, 75);
             currentPage = 1;
         }
 
@@ -42,44 +42,61 @@ namespace AndroidBackpackPaging
             Helper.Data.WriteSaveData("BackpackPage2_Items", page2Items);
         }
 
-        private void OnMenuChanged(object sender, MenuChangedEventArgs e)
-        {
-            if (e.NewMenu is ShopMenu shop && shop.ShopId == "SeedShop")
-            {
-                if (Game1.player.MaxItems >= 36 && !hasBoughtUpgrade)
-                {
-                    var item = ItemRegistry.Create("(O)BackpackUpgrade", 1);
-                    item.DisplayName = "Buku Tas Tambahan (Halaman 2 - 36 Slot)";
-                    shop.forSale.Add(item);
-                    shop.itemPriceAndStock.Add(item, new ItemStockInformation(UPGRADE_PRICE, 1));
-                }
-            }
-        }
-
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
         {
             if (!Context.IsWorldReady) return;
 
-            if (Game1.activeClickableMenu is ShopMenu shop && shop.ShopId == "SeedShop")
-            {
-                if (shop.heldItem != null && shop.heldItem.DisplayName.Contains("Buku Tas Tambahan"))
-                {
-                    hasBoughtUpgrade = true;
-                    Game1.player.Money -= UPGRADE_PRICE;
-                    shop.heldItem = null;
-                    Game1.playSound("reward");
-                    Game1.showGlobalMessage("Berhasil membeli Tas Halaman 2!");
-                    return;
-                }
-            }
-
-            if (hasBoughtUpgrade && (e.Button == SButton.MouseLeft || e.Button == SButton.Android_Tap))
+            // Di Android SMAPI, sentuhan layar dibaca sebagai MouseLeft
+            if (e.Button == SButton.MouseLeft)
             {
                 Point touchPos = Game1.getMousePosition();
+
                 if (switchButtonBounds.Contains(touchPos) && Game1.activeClickableMenu == null)
                 {
                     Helper.Input.Suppress(e.Button);
-                    SwapInventoryPages();
+
+                    // Jika BELUM dibeli, munculkan dialog pembelian
+                    if (!hasBoughtUpgrade)
+                    {
+                        if (Game1.player.MaxItems < 36)
+                        {
+                            Game1.drawObjectDialogue("Kamu harus memiliki Tas 36 Slot (Deluxe) terlebih dahulu sebelum membeli halaman tambahan.");
+                            return;
+                        }
+
+                        var responses = new Response[]
+                        {
+                            new Response("Yes", $"Beli seharga {UPGRADE_PRICE:N0}g"),
+                            new Response("No", "Batal")
+                        };
+
+                        Game1.currentLocation.createQuestionDialogue(
+                            $"Buka Tas Tambahan Halaman 2 (36 Slot Ekstra)?",
+                            responses,
+                            (farmer, answer) =>
+                            {
+                                if (answer == "Yes")
+                                {
+                                    if (farmer.Money >= UPGRADE_PRICE)
+                                    {
+                                        farmer.Money -= UPGRADE_PRICE;
+                                        hasBoughtUpgrade = true;
+                                        Game1.playSound("reward");
+                                        Game1.showGlobalMessage("Selamat! Tas Halaman 2 berhasil diaktifkan!");
+                                    }
+                                    else
+                                    {
+                                        Game1.drawObjectDialogue("Uangmu tidak cukup untuk membeli tas ini.");
+                                    }
+                                }
+                            }
+                        );
+                    }
+                    else
+                    {
+                        // Jika SUDAH dibeli, ganti halaman tas
+                        SwapInventoryPages();
+                    }
                 }
             }
         }
@@ -105,16 +122,21 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedHud(object sender, RenderedHudEventArgs e)
         {
-            if (Context.IsWorldReady && hasBoughtUpgrade && Game1.activeClickableMenu == null)
+            if (Context.IsWorldReady && Game1.activeClickableMenu == null)
             {
+                // Gambar tombol kotak hitam transparan di layar HP
                 e.SpriteBatch.Draw(Game1.staminaRect, switchButtonBounds, Color.Black * 0.6f);
-                string text = $"P{currentPage}";
+
+                string text = hasBoughtUpgrade ? $"P{currentPage}" : "BUY";
+                Color textColor = hasBoughtUpgrade ? Color.Gold : Color.LightGray;
+
                 Vector2 textSize = Game1.smallFont.MeasureString(text);
                 Vector2 textPos = new Vector2(
                     switchButtonBounds.X + (switchButtonBounds.Width - textSize.X) / 2,
                     switchButtonBounds.Y + (switchButtonBounds.Height - textSize.Y) / 2
                 );
-                e.SpriteBatch.DrawString(Game1.smallFont, text, textPos, Color.Gold);
+
+                e.SpriteBatch.DrawString(Game1.smallFont, text, textPos, textColor);
             }
         }
     }
