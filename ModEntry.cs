@@ -1,19 +1,23 @@
-using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
-using StardewValley.Menus;
 
 namespace AndroidBackpackPaging
 {
+    // Kelas data penyimpanan khusus untuk SMAPI
+    public class ModSaveData
+    {
+        public bool HasBoughtBackpackPage2 { get; set; } = false;
+        public List<Item> BackpackPage2_Items { get; set; } = new List<Item>();
+    }
+
     public class ModEntry : Mod
     {
-        private bool hasBoughtUpgrade = false;
+        private ModSaveData saveData = new ModSaveData();
         private int currentPage = 1;
-        private List<Item> page2Items = new List<Item>();
         private Rectangle switchButtonBounds;
         private const int UPGRADE_PRICE = 50000;
 
@@ -27,26 +31,20 @@ namespace AndroidBackpackPaging
 
         private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
         {
-            hasBoughtUpgrade = Helper.Data.ReadSaveData<bool>("HasBoughtBackpackPage2");
-            var savedItems = Helper.Data.ReadSaveData<List<Item>>("BackpackPage2_Items");
-            page2Items = savedItems ?? new List<Item>();
-
-            // Posisi tombol [P1/P2] di layar HP
+            saveData = Helper.Data.ReadSaveData<ModSaveData>("AndroidBackpackData") ?? new ModSaveData();
             switchButtonBounds = new Rectangle(20, 180, 75, 75);
             currentPage = 1;
         }
 
         private void OnSaving(object sender, SavingEventArgs e)
         {
-            Helper.Data.WriteSaveData("HasBoughtBackpackPage2", hasBoughtUpgrade);
-            Helper.Data.WriteSaveData("BackpackPage2_Items", page2Items);
+            Helper.Data.WriteSaveData("AndroidBackpackData", saveData);
         }
 
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
         {
             if (!Context.IsWorldReady) return;
 
-            // Di Android SMAPI, sentuhan layar dibaca sebagai MouseLeft
             if (e.Button == SButton.MouseLeft)
             {
                 Point touchPos = Game1.getMousePosition();
@@ -55,46 +53,28 @@ namespace AndroidBackpackPaging
                 {
                     Helper.Input.Suppress(e.Button);
 
-                    // Jika BELUM dibeli, munculkan dialog pembelian
-                    if (!hasBoughtUpgrade)
+                    if (!saveData.HasBoughtBackpackPage2)
                     {
                         if (Game1.player.MaxItems < 36)
                         {
-                            Game1.drawObjectDialogue("Kamu harus memiliki Tas 36 Slot (Deluxe) terlebih dahulu sebelum membeli halaman tambahan.");
+                            Game1.drawObjectDialogue("Kamu harus memiliki Tas 36 Slot (Deluxe) terlebih dahulu.");
                             return;
                         }
 
-                        var responses = new Response[]
+                        if (Game1.player.Money >= UPGRADE_PRICE)
                         {
-                            new Response("Yes", $"Beli seharga {UPGRADE_PRICE:N0}g"),
-                            new Response("No", "Batal")
-                        };
-
-                        Game1.currentLocation.createQuestionDialogue(
-                            $"Buka Tas Tambahan Halaman 2 (36 Slot Ekstra)?",
-                            responses,
-                            (farmer, answer) =>
-                            {
-                                if (answer == "Yes")
-                                {
-                                    if (farmer.Money >= UPGRADE_PRICE)
-                                    {
-                                        farmer.Money -= UPGRADE_PRICE;
-                                        hasBoughtUpgrade = true;
-                                        Game1.playSound("reward");
-                                        Game1.showGlobalMessage("Selamat! Tas Halaman 2 berhasil diaktifkan!");
-                                    }
-                                    else
-                                    {
-                                        Game1.drawObjectDialogue("Uangmu tidak cukup untuk membeli tas ini.");
-                                    }
-                                }
-                            }
-                        );
+                            Game1.player.Money -= UPGRADE_PRICE;
+                            saveData.HasBoughtBackpackPage2 = true;
+                            Game1.playSound("reward");
+                            Game1.showGlobalMessage("Selamat! Tas Halaman 2 (36 Slot) berhasil dibeli!");
+                        }
+                        else
+                        {
+                            Game1.drawObjectDialogue($"Uangmu tidak cukup untuk membeli Tas Halaman 2 (Harga: {UPGRADE_PRICE:N0}g).");
+                        }
                     }
                     else
                     {
-                        // Jika SUDAH dibeli, ganti halaman tas
                         SwapInventoryPages();
                     }
                 }
@@ -109,13 +89,13 @@ namespace AndroidBackpackPaging
             Game1.player.Items.Clear();
             for (int i = 0; i < 36; i++)
             {
-                if (i < page2Items.Count && page2Items[i] != null)
-                    Game1.player.Items.Add(page2Items[i]);
+                if (i < saveData.BackpackPage2_Items.Count && saveData.BackpackPage2_Items[i] != null)
+                    Game1.player.Items.Add(saveData.BackpackPage2_Items[i]);
                 else
                     Game1.player.Items.Add(null);
             }
 
-            page2Items = currentActiveItems;
+            saveData.BackpackPage2_Items = currentActiveItems;
             currentPage = (currentPage == 1) ? 2 : 1;
             Game1.showGlobalMessage($"Tas Aktif: Halaman {currentPage}");
         }
@@ -124,11 +104,10 @@ namespace AndroidBackpackPaging
         {
             if (Context.IsWorldReady && Game1.activeClickableMenu == null)
             {
-                // Gambar tombol kotak hitam transparan di layar HP
                 e.SpriteBatch.Draw(Game1.staminaRect, switchButtonBounds, Color.Black * 0.6f);
 
-                string text = hasBoughtUpgrade ? $"P{currentPage}" : "BUY";
-                Color textColor = hasBoughtUpgrade ? Color.Gold : Color.LightGray;
+                string text = saveData.HasBoughtBackpackPage2 ? $"P{currentPage}" : "BUY";
+                Color textColor = saveData.HasBoughtBackpackPage2 ? Color.Gold : Color.LightGray;
 
                 Vector2 textSize = Game1.smallFont.MeasureString(text);
                 Vector2 textPos = new Vector2(
