@@ -1,0 +1,30 @@
+name: Build Mod
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET 6
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Build C# Mod
+      run: dotnet build -c Release
+
+    - name: Pack Mod Zip
+      run: |
+        mkdir -p ./ModOutput/AndroidBackpackPaging
+        cp bin/Release/net6.0/AndroidBackpackPaging.dll ./ModOutput/AndroidBackpackPaging/
+        cp manifest.json ./ModOutput/AndroidBackpackPaging/
+        cd ModOutput && zip -r ../AndroidBackpackPaging.zip AndroidBackpackPaging
+
+    - name: Upload Mod Zip
+      uses: actions/upload-artifact@v4
+      with:
+        name: AndroidBackpackPaging-Mod
+        path: AndroidBackpackPaging.zip
