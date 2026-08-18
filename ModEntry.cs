@@ -23,7 +23,6 @@ namespace AndroidBackpackPaging
             greenBackpackTexture = CreateGreenBackpackTexture();
         }
 
-        // Generator Pixel Art Tas Hijau Pierre
         private Texture2D CreateGreenBackpackTexture()
         {
             Texture2D tex = new Texture2D(Game1.graphics.GraphicsDevice, 12, 14);
@@ -57,7 +56,6 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Gambar TAS HIJAU di atas meja Pierre
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 10, 18 * 64 - 36);
@@ -79,7 +77,6 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            // RAMPATKAN 4 BARIS AGAR MENYATU RAPI DI DALAM MENU ATAS
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage)
@@ -87,13 +84,11 @@ namespace AndroidBackpackPaging
                     var invMenu = invPage.inventory;
                     if (invMenu != null && invMenu.inventory.Count >= 36)
                     {
-                        int startX = invMenu.inventory[0].bounds.X;
-                        int startY = invMenu.yPositionOnScreen - 8; // Geser sedikit ke atas
+                        int startY = invMenu.yPositionOnScreen - 8;
                         int slotW = invMenu.inventory[0].bounds.Width;
-                        int slotH = 50;  // Tinggi slot dibuat lebih ramping
-                        int stepY = 52;  // Jarak antar baris rapat
+                        int slotH = 50;
+                        int stepY = 52;
 
-                        // 1. Reposisi baris 1, 2, 3 agar lebih rapat dan muat 4 baris
                         for (int r = 0; r < 3; r++)
                         {
                             for (int c = 0; c < 12; c++)
@@ -111,7 +106,6 @@ namespace AndroidBackpackPaging
                             }
                         }
 
-                        // 2. Gambar baris ke-4 menyatu di bawah baris ke-3 (Sebelum dibeli = Gelap)
                         if (Game1.player.MaxItems == 36)
                         {
                             int row4Y = startY + (3 * stepY);
@@ -121,7 +115,6 @@ namespace AndroidBackpackPaging
                                 int slotX = invMenu.inventory[c].bounds.X;
                                 Rectangle row4Slot = new Rectangle(slotX, row4Y, slotW, slotH);
 
-                                // Gambar slot baris ke-4 terkunci (menyatu dalam menu krem)
                                 e.SpriteBatch.Draw(
                                     Game1.menuTexture,
                                     row4Slot,
@@ -141,6 +134,48 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                // Beli tas 48 slot di meja Pierre
                 if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
                 {
+                    Vector2 clickedTile = e.Cursor.Tile;
+
+                    if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
+                    {
+                        if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
+                        {
+                            Helper.Input.Suppress(e.Button);
+
+                            var responses = new Response[]
+                            {
+                                new Response("Purchase", $"Beli ({UPGRADE_PRICE:N0}g)"),
+                                new Response("NotNow", "Nanti saja")
+                            };
+
+                            Game1.currentLocation.createQuestionDialogue(
+                                "Peningkatan Tas -- 48 slot",
+                                responses,
+                                new GameLocation.afterQuestionBehavior((farmer, answer) =>
+                                {
+                                    if (answer == "Purchase")
+                                    {
+                                        if (farmer.Money >= UPGRADE_PRICE)
+                                        {
+                                            farmer.Money -= UPGRADE_PRICE;
+                                            farmer.MaxItems = 48;
+
+                                            Game1.playSound("reward");
+                                            Game1.showGlobalMessage("Peningkatan Tas Selesai! Tas kamu sekarang 4 Baris (48 Slot).");
+                                        }
+                                        else
+                                        {
+                                            Game1.drawObjectDialogue("Uangmu tidak cukup (Butuh 50.000g).");
+                                        }
+                                    }
+                                })
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
