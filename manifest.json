@@ -1,0 +1,9 @@
+{
+  "Name": "Android Backpack Paging",
+  "Author": "CustomMod",
+  "Version": "1.0.0",
+  "Description": "Mod tas sistem halaman khusus Android SV 1.6",
+  "UniqueID": "Android.BackpackPaging.Mod",
+  "EntryDll": "AndroidBackpackPaging.dll",
+  "MinimumApiVersion": "4.0.0"
+}
