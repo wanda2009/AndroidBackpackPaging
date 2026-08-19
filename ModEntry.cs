@@ -17,12 +17,12 @@ namespace AndroidBackpackPaging
 
         public override void Entry(IModHelper helper)
         {
-            helper.Events.Display.RenderingWorld += OnRenderingWorld;
+            helper.Events.Display.RenderedWorld += OnRenderedWorld;
             helper.Events.Display.MenuChanged += OnMenuChanged;
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
-            // Muat gambar backpack.png asli
+            // Muat file gambar asli backpack.png
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -44,15 +44,14 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void OnRenderingWorld(object sender, RenderingWorldEventArgs e)
+        private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // GAMBAR TAS DI MEJA DENGAN KEDALAMAN YANG BENAR (Di belakang badan player)
+            // TAMPILKAN TAS HIJAU DI MEJA PIERRE (Sebelum dibeli)
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 42);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
-                // Menggunakan layerDepth meja (0.118f) agar karakter di Y=19 otomatis berada di depannya
                 e.SpriteBatch.Draw(
                     backpackTexture,
                     screenPos,
@@ -62,48 +61,55 @@ namespace AndroidBackpackPaging
                     Vector2.Zero,
                     3.2f,
                     SpriteEffects.None,
-                    (18f * 64f + 20f) / 10000f
+                    0.86f
                 );
             }
         }
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            // BUKA 4 BARIS (48 KOTAK) DI MENU TAS SAAT SUDAH BELI 48 SLOT
-            if (e.NewMenu is GameMenu gameMenu && Game1.player.MaxItems == 48)
+            SetupInventoryGrid(e.NewMenu);
+        }
+
+        private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
+        {
+            SetupInventoryGrid(Game1.activeClickableMenu);
+
+            // SEBELUM BELI: Gambar efek arsiran terkunci (locked) ala vanilla pada baris ke-4
+            if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
             {
-                if (gameMenu.GetCurrentPage() is InventoryPage invPage)
+                if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                 {
                     var invMenu = invPage.inventory;
-                    if (invMenu != null && invMenu.inventory.Count == 36)
+                    if (invMenu.inventory.Count >= 48)
                     {
-                        invMenu.capacity = 48;
-                        invMenu.rows = 4;
-
-                        int rowHeight = invMenu.inventory[12].bounds.Y - invMenu.inventory[0].bounds.Y;
-
-                        // Tambahkan 12 komponen kotak baris ke-4 ke dalam menu
-                        for (int i = 0; i < 12; i++)
+                        for (int i = 36; i < 48; i++)
                         {
-                            var row3Slot = invMenu.inventory[24 + i];
-                            Rectangle row4SlotBounds = new Rectangle(
-                                row3Slot.bounds.X,
-                                row3Slot.bounds.Y + rowHeight,
-                                row3Slot.bounds.Width,
-                                row3Slot.bounds.Height
+                            var slot = invMenu.inventory[i];
+                            
+                            // Kotak arsiran gelap seperti tas terkunci di game bawaan
+                            IClickableMenu.drawTextureBox(
+                                e.SpriteBatch,
+                                Game1.menuTexture,
+                                new Rectangle(0, 256, 60, 60),
+                                slot.bounds.X,
+                                slot.bounds.Y,
+                                slot.bounds.Width,
+                                slot.bounds.Height,
+                                Color.DimGray * 0.40f,
+                                1f,
+                                false
                             );
-
-                            invMenu.inventory.Add(new ClickableComponent(row4SlotBounds, (36 + i).ToString()));
                         }
                     }
                 }
             }
         }
 
-        private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
+        private void SetupInventoryGrid(IClickableMenu menu)
         {
-            // Pastikan baris ke-4 tetap aktif terisi jika menu di-render ulang
-            if (Game1.activeClickableMenu is GameMenu gameMenu && Game1.player.MaxItems == 48)
+            // Buat 4 baris komponen kotak resmi (aktif sebelum & sesudah beli)
+            if (menu is GameMenu gameMenu)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage)
                 {
@@ -138,6 +144,24 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
+                // Kunci sentuhan pada baris ke-4 sebelum dibeli (bunyi cancel)
+                if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
+                {
+                    if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
+                    {
+                        Point touchPos = Game1.getMousePosition();
+                        for (int i = 36; i < invPage.inventory.inventory.Count; i++)
+                        {
+                            if (invPage.inventory.inventory[i].bounds.Contains(touchPos))
+                            {
+                                Helper.Input.Suppress(e.Button);
+                                Game1.playSound("cancel");
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 // Beli tas 48 slot di meja Pierre
                 if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
                 {
@@ -165,7 +189,7 @@ namespace AndroidBackpackPaging
                                         if (farmer.Money >= UPGRADE_PRICE)
                                         {
                                             farmer.Money -= UPGRADE_PRICE;
-                                            farmer.MaxItems = 48; // Buka 48 slot
+                                            farmer.MaxItems = 48; // Buka 48 slot penuh
 
                                             Game1.playSound("reward");
                                             Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
