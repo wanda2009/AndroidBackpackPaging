@@ -22,6 +22,7 @@ namespace AndroidBackpackPaging
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
+            // Load original backpack.png image
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -45,6 +46,7 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
+            // Draw green backpack on Pierre's counter and keep player in front
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -61,112 +63,50 @@ namespace AndroidBackpackPaging
                     SpriteEffects.None,
                     0.86f
                 );
+
+                if (Game1.player.Tile.Y >= 17 && Math.Abs(Game1.player.Tile.X - 7) <= 2)
+                {
+                    Game1.player.draw(e.SpriteBatch);
+                }
             }
         }
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            FormatInventoryGridEvenly(e.NewMenu);
+            UpdateInventoryMenu48(e.NewMenu);
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            FormatInventoryGridEvenly(Game1.activeClickableMenu);
+            UpdateInventoryMenu48(Game1.activeClickableMenu);
+        }
 
-            if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
+        private void UpdateInventoryMenu48(IClickableMenu menu)
+        {
+            // Enable 4 rows (48 slots) when player owns the 48-slot backpack
+            if (menu is GameMenu gameMenu && Game1.player.MaxItems == 48)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                 {
                     var invMenu = invPage.inventory;
-                    if (invMenu.inventory.Count >= 48)
+                    if (invMenu.inventory.Count == 36)
                     {
-                        for (int i = 36; i < 48; i++)
+                        invMenu.capacity = 48;
+                        invMenu.rows = 4;
+
+                        int rowHeight = invMenu.inventory[12].bounds.Y - invMenu.inventory[0].bounds.Y;
+
+                        for (int i = 0; i < 12; i++)
                         {
-                            var slot = invMenu.inventory[i];
-                            
-                            IClickableMenu.drawTextureBox(
-                                e.SpriteBatch,
-                                Game1.menuTexture,
-                                new Rectangle(0, 256, 60, 60),
-                                slot.bounds.X,
-                                slot.bounds.Y,
-                                slot.bounds.Width,
-                                slot.bounds.Height,
-                                Color.DimGray * 0.40f,
-                                1f,
-                                false
+                            var row3Slot = invMenu.inventory[24 + i];
+                            Rectangle row4SlotBounds = new Rectangle(
+                                row3Slot.bounds.X,
+                                row3Slot.bounds.Y + rowHeight,
+                                row3Slot.bounds.Width,
+                                row3Slot.bounds.Height
                             );
-                        }
-                    }
-                }
-            }
-        }
 
-        private void FormatInventoryGridEvenly(IClickableMenu menu)
-        {
-            if (menu is GameMenu gameMenu)
-            {
-                if (gameMenu.GetCurrentPage() is InventoryPage invPage)
-                {
-                    var invMenu = invPage.inventory;
-                    if (invMenu != null)
-                    {
-                        int slotSize = 48;
-                        int gapX = 4;
-                        int gapY = 9;
-                        int stepY = slotSize + gapY;
-
-                        int totalWidth = 12 * (slotSize + gapX) - gapX;
-                        int startX = invMenu.xPositionOnScreen + (invMenu.width - totalWidth) / 2;
-                        int startY = invMenu.yPositionOnScreen - 2;
-
-                        for (int r = 0; r < 3; r++)
-                        {
-                            for (int c = 0; c < 12; c++)
-                            {
-                                int idx = r * 12 + c;
-                                if (idx < invMenu.inventory.Count)
-                                {
-                                    invMenu.inventory[idx].bounds = new Rectangle(
-                                        startX + c * (slotSize + gapX),
-                                        startY + (r * stepY),
-                                        slotSize,
-                                        slotSize
-                                    );
-                                }
-                            }
-                        }
-
-                        if (invMenu.inventory.Count == 36)
-                        {
-                            invMenu.capacity = 48;
-                            invMenu.rows = 4;
-
-                            int row4Y = startY + (3 * stepY);
-
-                            for (int c = 0; c < 12; c++)
-                            {
-                                int slotX = startX + c * (slotSize + gapX);
-                                Rectangle row4Bounds = new Rectangle(slotX, row4Y, slotSize, slotSize);
-                                invMenu.inventory.Add(new ClickableComponent(row4Bounds, (36 + c).ToString()));
-                            }
-                        }
-                        else if (invMenu.inventory.Count >= 48)
-                        {
-                            int row4Y = startY + (3 * stepY);
-                            for (int c = 0; c < 12; c++)
-                            {
-                                int idx = 36 + c;
-                                if (idx < invMenu.inventory.Count)
-                                {
-                                    invMenu.inventory[idx].bounds = new Rectangle(
-                                        startX + c * (slotSize + gapX),
-                                        row4Y,
-                                        slotSize,
-                                        slotSize
-                                    );
-                                }
-                            }
+                            invMenu.inventory.Add(new ClickableComponent(row4SlotBounds, (36 + i).ToString()));
                         }
                     }
                 }
@@ -179,23 +119,7 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
-                {
-                    if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
-                    {
-                        Point touchPos = Game1.getMousePosition();
-                        for (int i = 36; i < invPage.inventory.inventory.Count; i++)
-                        {
-                            if (invPage.inventory.inventory[i].bounds.Contains(touchPos))
-                            {
-                                Helper.Input.Suppress(e.Button);
-                                Game1.playSound("cancel");
-                                return;
-                            }
-                        }
-                    }
-                }
-
+                // Buy 48-slot backpack at Pierre's counter
                 if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
                 {
                     Vector2 clickedTile = e.Cursor.Tile;
