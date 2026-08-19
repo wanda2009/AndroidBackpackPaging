@@ -19,6 +19,7 @@ jobs:
         mkdir -p ./Package/AndroidBackpackPaging
         cp bin/Release/net6.0/AndroidBackpackPaging.dll ./Package/AndroidBackpackPaging/
         cp manifest.json ./Package/AndroidBackpackPaging/
+        cp backpack.png ./Package/AndroidBackpackPaging/
         cd Package && zip -r ../AndroidBackpackPaging.zip AndroidBackpackPaging
 
     - name: Upload Mod Zip
