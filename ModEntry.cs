@@ -14,16 +14,12 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
-        
-        private int rowOffset = 0; // 0 = Baris 1-3, 1 = Baris 2-4
         private int touchStartY = -1;
         private bool isSwiping = false;
 
         public override void Entry(IModHelper helper)
         {
             helper.Events.Display.RenderedWorld += OnRenderedWorld;
-            helper.Events.Display.MenuChanged += OnMenuChanged;
-            helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonReleased += OnButtonReleased;
 
@@ -51,7 +47,7 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // TAMPILKAN TAS DI MEJA KASIR PIERRE (Player otomatis di depan tas)
+            // Tampilkan tas di atas meja Pierre & player di depan tas
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -76,101 +72,17 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void OnMenuChanged(object sender, MenuChangedEventArgs e)
-        {
-            rowOffset = 0; // Reset ke baris atas saat menu baru dibuka
-            UpdateSlotMapping(e.NewMenu);
-        }
-
-        private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
-        {
-            UpdateSlotMapping(Game1.activeClickableMenu);
-
-            // Indikator Posisi Scroll & Efek Terkunci
-            if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
-            {
-                if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
-                {
-                    var invMenu = invPage.inventory;
-                    int rightX = invMenu.inventory[11].bounds.X + invMenu.inventory[11].bounds.Width + 10;
-                    int topY = invMenu.inventory[0].bounds.Y + 20;
-
-                    // Gambar Indikator Scroll Kecil (Dot Titik) di samping kanan tas
-                    e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(rightX, topY, 6, 6), (rowOffset == 0) ? Color.Gold : Color.DimGray * 0.5f);
-                    e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(rightX, topY + 16, 6, 6), (rowOffset == 1) ? Color.Gold : Color.DimGray * 0.5f);
-
-                    // Jika berada di baris ke-4 dan BELUM beli tas 48 slot: gambar arsiran gelap pada baris paling bawah
-                    if (rowOffset == 1 && Game1.player.MaxItems == 36)
-                    {
-                        for (int i = 24; i < 36; i++)
-                        {
-                            var slot = invMenu.inventory[i];
-                            IClickableMenu.drawTextureBox(
-                                e.SpriteBatch,
-                                Game1.menuTexture,
-                                new Rectangle(0, 256, 60, 60),
-                                slot.bounds.X,
-                                slot.bounds.Y,
-                                slot.bounds.Width,
-                                slot.bounds.Height,
-                                Color.DimGray * 0.40f,
-                                1f,
-                                false
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        private void UpdateSlotMapping(IClickableMenu menu)
-        {
-            if (menu is GameMenu gameMenu && gameMenu.currentTab == 0)
-            {
-                if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
-                {
-                    var invMenu = invPage.inventory;
-                    if (invMenu.inventory.Count == 36)
-                    {
-                        // Petakan indeks slot sesuai posisi scroll (0-35 atau 12-47)
-                        for (int i = 0; i < 36; i++)
-                        {
-                            invMenu.inventory[i].name = (rowOffset * 12 + i).ToString();
-                        }
-                    }
-                }
-            }
-        }
-
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
         {
             if (!Context.IsWorldReady) return;
 
             if (e.Button == SButton.MouseLeft)
             {
-                // Rekam titik awal sentuhan untuk mendeteksi Swipe di menu tas
+                // Catat posisi awal sentuhan untuk deteksi Swipe di menu tas
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
                 {
                     touchStartY = Game1.getMousePosition().Y;
                     isSwiping = true;
-
-                    // Kunci baris ke-4 jika belum beli
-                    if (rowOffset == 1 && Game1.player.MaxItems == 36)
-                    {
-                        if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
-                        {
-                            Point touchPos = Game1.getMousePosition();
-                            for (int i = 24; i < 36; i++)
-                            {
-                                if (invPage.inventory.inventory[i].bounds.Contains(touchPos))
-                                {
-                                    Helper.Input.Suppress(e.Button);
-                                    Game1.playSound("cancel");
-                                    return;
-                                }
-                            }
-                        }
-                    }
                 }
 
                 // Interaksi beli tas 48 slot di meja Pierre
@@ -220,31 +132,62 @@ namespace AndroidBackpackPaging
 
         private void OnButtonReleased(object sender, ButtonReleasedEventArgs e)
         {
-            // DETEKSI GESTUR SWIPE (USAP LAYAR)
+            // DETEKSI GESTUR SWIPE & GESER SELURUH BARIS ITEM
             if (e.Button == SButton.MouseLeft && isSwiping && touchStartY >= 0)
             {
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
                 {
                     int deltaY = touchStartY - Game1.getMousePosition().Y;
 
-                    // Swipe UP (Usap ke Atas minimal 35 piksel) -> Scroll ke Baris 2-4
-                    if (deltaY > 35 && rowOffset == 0)
+                    // Swipe UP (Usap ke Atas minimal 35 piksel) -> Baris 1, 2, 3 bergeser naik
+                    if (deltaY > 35)
                     {
-                        rowOffset = 1;
-                        Game1.playSound("shwip");
-                        UpdateSlotMapping(gameMenu);
+                        ShiftInventoryRows(true);
                     }
-                    // Swipe DOWN (Usap ke Bawah minimal 35 piksel) -> Scroll ke Baris 1-3
-                    else if (deltaY < -35 && rowOffset == 1)
+                    // Swipe DOWN (Usap ke Bawah minimal 35 piksel) -> Baris 1, 2, 3 bergeser turun
+                    else if (deltaY < -35)
                     {
-                        rowOffset = 0;
-                        Game1.playSound("shwip");
-                        UpdateSlotMapping(gameMenu);
+                        ShiftInventoryRows(false);
                     }
                 }
 
                 isSwiping = false;
                 touchStartY = -1;
+            }
+        }
+
+        private void ShiftInventoryRows(bool forward)
+        {
+            // Pastikan tas sudah 48 slot sebelum bisa digeser
+            if (Game1.player.MaxItems != 48 || Game1.player.Items.Count < 48) return;
+
+            Game1.playSound("shwip");
+
+            if (forward)
+            {
+                // Swipe UP: Geser semua baris naik (Baris 2, 3, 4 muncul di layar)
+                List<Item> row1 = new List<Item>();
+                for (int i = 0; i < 12; i++)
+                    row1.Add(Game1.player.Items[i]);
+
+                for (int i = 12; i < 48; i++)
+                    Game1.player.Items[i - 12] = Game1.player.Items[i];
+
+                for (int i = 0; i < 12; i++)
+                    Game1.player.Items[36 + i] = row1[i];
+            }
+            else
+            {
+                // Swipe DOWN: Geser semua baris turun (Kembali ke Baris 1, 2, 3)
+                List<Item> row4 = new List<Item>();
+                for (int i = 36; i < 48; i++)
+                    row4.Add(Game1.player.Items[i]);
+
+                for (int i = 35; i >= 0; i--)
+                    Game1.player.Items[i + 12] = Game1.player.Items[i];
+
+                for (int i = 0; i < 12; i++)
+                    Game1.player.Items[i] = row4[i];
             }
         }
     }
