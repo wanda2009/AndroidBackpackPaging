@@ -1,9 +1,9 @@
 {
-  "Name": "Android Backpack Paging",
-  "Author": "CustomMod",
+  "Name": "Bigger Backpack for Android",
+  "Author": "wanda2009",
   "Version": "1.0.0",
-  "Description": "Mod tas sistem halaman khusus Android SV 1.6",
-  "UniqueID": "Android.BackpackPaging.Mod",
+  "Description": "Adds a 48-slot backpack upgrade at Pierre's store, designed specifically for Android touch UI in Stardew Valley 1.6.",
+  "UniqueID": "wanda2009.BiggerBackpackAndroid",
   "EntryDll": "AndroidBackpackPaging.dll",
   "MinimumApiVersion": "4.0.0"
 }
