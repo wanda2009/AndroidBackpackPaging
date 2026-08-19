@@ -46,10 +46,11 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // TAMPILKAN TAS HIJAU DI MEJA PIERRE (Sebelum dibeli)
+            // TAMPILKAN TAS HIJAU PAS DI ATAS RAK MEJA KASIR (Tidak menimpa helm)
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
-                Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 42);
+                // Posisi dinaikkan ke -58 agar pas di atas rak meja kasir putih
+                Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 58);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
                 e.SpriteBatch.Draw(
@@ -59,7 +60,7 @@ namespace AndroidBackpackPaging
                     Color.White,
                     0f,
                     Vector2.Zero,
-                    3.2f,
+                    3.0f, // Skala proporsional
                     SpriteEffects.None,
                     0.86f
                 );
@@ -68,14 +69,14 @@ namespace AndroidBackpackPaging
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            SetupInventoryGrid(e.NewMenu);
+            FormatInventoryGrid(e.NewMenu);
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            SetupInventoryGrid(Game1.activeClickableMenu);
+            FormatInventoryGrid(Game1.activeClickableMenu);
 
-            // SEBELUM BELI: Gambar efek arsiran terkunci (locked) ala vanilla pada baris ke-4
+            // SEBELUM BELI (36 SLOT): Berikan efek bayangan terkunci pada baris ke-4
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
@@ -87,7 +88,6 @@ namespace AndroidBackpackPaging
                         {
                             var slot = invMenu.inventory[i];
                             
-                            // Kotak arsiran gelap seperti tas terkunci di game bawaan
                             IClickableMenu.drawTextureBox(
                                 e.SpriteBatch,
                                 Game1.menuTexture,
@@ -106,32 +106,71 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void SetupInventoryGrid(IClickableMenu menu)
+        private void FormatInventoryGrid(IClickableMenu menu)
         {
-            // Buat 4 baris komponen kotak resmi (aktif sebelum & sesudah beli)
+            // MENATA 4 BARIS RAPAT AGAR BERADA DI ATAS GARIS COKELAT (TIDAK MENABRAK NAMA)
             if (menu is GameMenu gameMenu)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage)
                 {
                     var invMenu = invPage.inventory;
-                    if (invMenu != null && invMenu.inventory.Count == 36)
+                    if (invMenu != null)
                     {
-                        invMenu.capacity = 48;
-                        invMenu.rows = 4;
+                        int startX = invMenu.inventory[0].bounds.X;
+                        int startY = invMenu.yPositionOnScreen - 18; // Dinaikkan ke atas
+                        int slotSize = 64;
+                        int stepY = 56; // Jarak vertikal lebih rapat
 
-                        int rowHeight = invMenu.inventory[12].bounds.Y - invMenu.inventory[0].bounds.Y;
-
-                        for (int i = 0; i < 12; i++)
+                        // Reposisi baris 1-3
+                        for (int r = 0; r < 3; r++)
                         {
-                            var row3Slot = invMenu.inventory[24 + i];
-                            Rectangle row4SlotBounds = new Rectangle(
-                                row3Slot.bounds.X,
-                                row3Slot.bounds.Y + rowHeight,
-                                row3Slot.bounds.Width,
-                                row3Slot.bounds.Height
-                            );
+                            for (int c = 0; c < 12; c++)
+                            {
+                                int idx = r * 12 + c;
+                                if (idx < invMenu.inventory.Count)
+                                {
+                                    invMenu.inventory[idx].bounds = new Rectangle(
+                                        invMenu.inventory[idx].bounds.X,
+                                        startY + (r * stepY),
+                                        slotSize,
+                                        slotSize
+                                    );
+                                }
+                            }
+                        }
 
-                            invMenu.inventory.Add(new ClickableComponent(row4SlotBounds, (36 + i).ToString()));
+                        // Tambahkan komponen baris ke-4 (jika belum ada)
+                        if (invMenu.inventory.Count == 36)
+                        {
+                            invMenu.capacity = 48;
+                            invMenu.rows = 4;
+
+                            int row4Y = startY + (3 * stepY);
+
+                            for (int c = 0; c < 12; c++)
+                            {
+                                int slotX = invMenu.inventory[c].bounds.X;
+                                Rectangle row4Bounds = new Rectangle(slotX, row4Y, slotSize, slotSize);
+                                invMenu.inventory.Add(new ClickableComponent(row4Bounds, (36 + c).ToString()));
+                            }
+                        }
+                        else if (invMenu.inventory.Count >= 48)
+                        {
+                            // Reposisi baris ke-4 agar tetap rapat
+                            int row4Y = startY + (3 * stepY);
+                            for (int c = 0; c < 12; c++)
+                            {
+                                int idx = 36 + c;
+                                if (idx < invMenu.inventory.Count)
+                                {
+                                    invMenu.inventory[idx].bounds = new Rectangle(
+                                        invMenu.inventory[idx].bounds.X,
+                                        row4Y,
+                                        slotSize,
+                                        slotSize
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -144,7 +183,7 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                // Kunci sentuhan pada baris ke-4 sebelum dibeli (bunyi cancel)
+                // Kunci baris ke-4 sebelum dibeli
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
                 {
                     if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
@@ -162,7 +201,7 @@ namespace AndroidBackpackPaging
                     }
                 }
 
-                // Beli tas 48 slot di meja Pierre
+                // Interaksi beli tas 48 slot di meja Pierre
                 if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
                 {
                     Vector2 clickedTile = e.Cursor.Tile;
@@ -189,7 +228,7 @@ namespace AndroidBackpackPaging
                                         if (farmer.Money >= UPGRADE_PRICE)
                                         {
                                             farmer.Money -= UPGRADE_PRICE;
-                                            farmer.MaxItems = 48; // Buka 48 slot penuh
+                                            farmer.MaxItems = 48; // Buka 48 slot
 
                                             Game1.playSound("reward");
                                             Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
