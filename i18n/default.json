@@ -1,7 +1,0 @@
-{
-  "BackpackUpgrade": "Backpack Upgrade -- 48 slots",
-  "Purchase": "Purchase ({{cost}}g)",
-  "NotNow": "Not now",
-  "UpgradeSuccess": "Backpack Upgrade Complete! You now have 48 slots.",
-  "NotEnoughMoney": "You don't have enough money (Costs {{cost}}g)."
-}
