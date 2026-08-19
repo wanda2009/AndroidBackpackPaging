@@ -22,7 +22,6 @@ namespace AndroidBackpackPaging
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
-            // Muat file gambar asli backpack.png
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -46,10 +45,8 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // TAMPILKAN TAS HIJAU PAS DI RAK ATAS MEJA PIERRE
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
-                // Posisi dinaikkan ke -56 (di rak atas meja kasir) agar pas dan tidak menyentuh helm
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
@@ -76,7 +73,6 @@ namespace AndroidBackpackPaging
         {
             FormatInventoryGridEvenly(Game1.activeClickableMenu);
 
-            // SEBELUM BELI (36 SLOT): Berikan efek arsiran terkunci pada baris ke-4
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
@@ -108,7 +104,6 @@ namespace AndroidBackpackPaging
 
         private void FormatInventoryGridEvenly(IClickableMenu menu)
         {
-            // DISTRIBUSI MERATA 4 BARIS DI DALAM KOTAK KREM (CELAH 9px, TIDAK DEMPET)
             if (menu is GameMenu gameMenu)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage)
@@ -116,16 +111,15 @@ namespace AndroidBackpackPaging
                     var invMenu = invPage.inventory;
                     if (invMenu != null)
                     {
-                        int slotSize = 48; // Bujur sangkar 48x48
+                        int slotSize = 48;
                         int gapX = 4;
-                        int gapY = 9;      // Celah vertikal merata
-                        int stepY = slotSize + gapY; // 57px per baris
+                        int gapY = 9;
+                        int stepY = slotSize + gapY;
 
                         int totalWidth = 12 * (slotSize + gapX) - gapX;
                         int startX = invMenu.xPositionOnScreen + (invMenu.width - totalWidth) / 2;
-                        int startY = invMenu.yPositionOnScreen - 2; // Mulai pas di dalam kotak krem
+                        int startY = invMenu.yPositionOnScreen - 2;
 
-                        // 1. Reposisi baris 1-3 merata
                         for (int r = 0; r < 3; r++)
                         {
                             for (int c = 0; c < 12; c++)
@@ -143,7 +137,6 @@ namespace AndroidBackpackPaging
                             }
                         }
 
-                        // 2. Tambahkan komponen baris ke-4 (jika belum ada)
                         if (invMenu.inventory.Count == 36)
                         {
                             invMenu.capacity = 48;
@@ -160,7 +153,6 @@ namespace AndroidBackpackPaging
                         }
                         else if (invMenu.inventory.Count >= 48)
                         {
-                            // Reposisi baris ke-4 agar tetap merata
                             int row4Y = startY + (3 * stepY);
                             for (int c = 0; c < 12; c++)
                             {
@@ -187,5 +179,65 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                // Kunci baris ke-4 sebelum dibeli (bunyi cancel)
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
+                {
+                    if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
+                    {
+                        Point touchPos = Game1.getMousePosition();
+                        for (int i = 36; i < invPage.inventory.inventory.Count; i++)
+                        {
+                            if (invPage.inventory.inventory[i].bounds.Contains(touchPos))
+                            {
+                                Helper.Input.Suppress(e.Button);
+                                Game1.playSound("cancel");
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
+                {
+                    Vector2 clickedTile = e.Cursor.Tile;
+
+                    if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
+                    {
+                        if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
+                        {
+                            Helper.Input.Suppress(e.Button);
+
+                            var responses = new Response[]
+                            {
+                                new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
+                                new Response("NotNow", "Not now")
+                            };
+
+                            Game1.currentLocation.createQuestionDialogue(
+                                "Backpack Upgrade -- 48 slots",
+                                responses,
+                                new GameLocation.afterQuestionBehavior((farmer, answer) =>
+                                {
+                                    if (answer == "Purchase")
+                                    {
+                                        if (farmer.Money >= UPGRADE_PRICE)
+                                        {
+                                            farmer.Money -= UPGRADE_PRICE;
+                                            farmer.MaxItems = 48;
+
+                                            Game1.playSound("reward");
+                                            Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
+                                        }
+                                        else
+                                        {
+                                            Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
+                                        }
+                                    }
+                                })
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
