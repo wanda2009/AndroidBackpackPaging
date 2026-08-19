@@ -46,11 +46,11 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // TAMPILKAN TAS HIJAU PAS DI ATAS RAK MEJA KASIR (Tidak menimpa helm)
+            // TAMPILKAN TAS HIJAU PAS DI RAK ATAS MEJA PIERRE
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
-                // Posisi dinaikkan ke -58 agar pas di atas rak meja kasir putih
-                Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 58);
+                // Posisi dinaikkan ke -56 (di rak atas meja kasir) agar pas dan tidak menyentuh helm
+                Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
                 e.SpriteBatch.Draw(
@@ -60,7 +60,7 @@ namespace AndroidBackpackPaging
                     Color.White,
                     0f,
                     Vector2.Zero,
-                    3.0f, // Skala proporsional
+                    3.0f,
                     SpriteEffects.None,
                     0.86f
                 );
@@ -69,14 +69,14 @@ namespace AndroidBackpackPaging
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            FormatInventoryGrid(e.NewMenu);
+            FormatInventoryGridEvenly(e.NewMenu);
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            FormatInventoryGrid(Game1.activeClickableMenu);
+            FormatInventoryGridEvenly(Game1.activeClickableMenu);
 
-            // SEBELUM BELI (36 SLOT): Berikan efek bayangan terkunci pada baris ke-4
+            // SEBELUM BELI (36 SLOT): Berikan efek arsiran terkunci pada baris ke-4
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
@@ -106,9 +106,9 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void FormatInventoryGrid(IClickableMenu menu)
+        private void FormatInventoryGridEvenly(IClickableMenu menu)
         {
-            // MENATA 4 BARIS RAPAT AGAR BERADA DI ATAS GARIS COKELAT (TIDAK MENABRAK NAMA)
+            // DISTRIBUSI MERATA 4 BARIS DI DALAM KOTAK KREM (CELAH 9px, TIDAK DEMPET)
             if (menu is GameMenu gameMenu)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage)
@@ -116,12 +116,16 @@ namespace AndroidBackpackPaging
                     var invMenu = invPage.inventory;
                     if (invMenu != null)
                     {
-                        int startX = invMenu.inventory[0].bounds.X;
-                        int startY = invMenu.yPositionOnScreen - 18; // Dinaikkan ke atas
-                        int slotSize = 64;
-                        int stepY = 56; // Jarak vertikal lebih rapat
+                        int slotSize = 48; // Bujur sangkar 48x48
+                        int gapX = 4;
+                        int gapY = 9;      // Celah vertikal merata
+                        int stepY = slotSize + gapY; // 57px per baris
 
-                        // Reposisi baris 1-3
+                        int totalWidth = 12 * (slotSize + gapX) - gapX;
+                        int startX = invMenu.xPositionOnScreen + (invMenu.width - totalWidth) / 2;
+                        int startY = invMenu.yPositionOnScreen - 2; // Mulai pas di dalam kotak krem
+
+                        // 1. Reposisi baris 1-3 merata
                         for (int r = 0; r < 3; r++)
                         {
                             for (int c = 0; c < 12; c++)
@@ -130,7 +134,7 @@ namespace AndroidBackpackPaging
                                 if (idx < invMenu.inventory.Count)
                                 {
                                     invMenu.inventory[idx].bounds = new Rectangle(
-                                        invMenu.inventory[idx].bounds.X,
+                                        startX + c * (slotSize + gapX),
                                         startY + (r * stepY),
                                         slotSize,
                                         slotSize
@@ -139,7 +143,7 @@ namespace AndroidBackpackPaging
                             }
                         }
 
-                        // Tambahkan komponen baris ke-4 (jika belum ada)
+                        // 2. Tambahkan komponen baris ke-4 (jika belum ada)
                         if (invMenu.inventory.Count == 36)
                         {
                             invMenu.capacity = 48;
@@ -149,14 +153,14 @@ namespace AndroidBackpackPaging
 
                             for (int c = 0; c < 12; c++)
                             {
-                                int slotX = invMenu.inventory[c].bounds.X;
+                                int slotX = startX + c * (slotSize + gapX);
                                 Rectangle row4Bounds = new Rectangle(slotX, row4Y, slotSize, slotSize);
                                 invMenu.inventory.Add(new ClickableComponent(row4Bounds, (36 + c).ToString()));
                             }
                         }
                         else if (invMenu.inventory.Count >= 48)
                         {
-                            // Reposisi baris ke-4 agar tetap rapat
+                            // Reposisi baris ke-4 agar tetap merata
                             int row4Y = startY + (3 * stepY);
                             for (int c = 0; c < 12; c++)
                             {
@@ -164,7 +168,7 @@ namespace AndroidBackpackPaging
                                 if (idx < invMenu.inventory.Count)
                                 {
                                     invMenu.inventory[idx].bounds = new Rectangle(
-                                        invMenu.inventory[idx].bounds.X,
+                                        startX + c * (slotSize + gapX),
                                         row4Y,
                                         slotSize,
                                         slotSize
@@ -183,67 +187,5 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                // Kunci baris ke-4 sebelum dibeli
+                // Kunci baris ke-4 sebelum dibeli (bunyi cancel)
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0 && Game1.player.MaxItems == 36)
-                {
-                    if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
-                    {
-                        Point touchPos = Game1.getMousePosition();
-                        for (int i = 36; i < invPage.inventory.inventory.Count; i++)
-                        {
-                            if (invPage.inventory.inventory[i].bounds.Contains(touchPos))
-                            {
-                                Helper.Input.Suppress(e.Button);
-                                Game1.playSound("cancel");
-                                return;
-                            }
-                        }
-                    }
-                }
-
-                // Interaksi beli tas 48 slot di meja Pierre
-                if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
-                {
-                    Vector2 clickedTile = e.Cursor.Tile;
-
-                    if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
-                    {
-                        if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
-                        {
-                            Helper.Input.Suppress(e.Button);
-
-                            var responses = new Response[]
-                            {
-                                new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
-                                new Response("NotNow", "Not now")
-                            };
-
-                            Game1.currentLocation.createQuestionDialogue(
-                                "Backpack Upgrade -- 48 slots",
-                                responses,
-                                new GameLocation.afterQuestionBehavior((farmer, answer) =>
-                                {
-                                    if (answer == "Purchase")
-                                    {
-                                        if (farmer.Money >= UPGRADE_PRICE)
-                                        {
-                                            farmer.Money -= UPGRADE_PRICE;
-                                            farmer.MaxItems = 48; // Buka 48 slot
-
-                                            Game1.playSound("reward");
-                                            Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
-                                        }
-                                        else
-                                        {
-                                            Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
-                                        }
-                                    }
-                                })
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
