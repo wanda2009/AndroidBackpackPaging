@@ -11,7 +11,7 @@ namespace AndroidBackpackPaging
 {
     public class ModEntry : Mod
     {
-        private Texture2D greenBackpackTexture;
+        private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
         public override void Entry(IModHelper helper)
@@ -20,63 +20,46 @@ namespace AndroidBackpackPaging
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
-            greenBackpackTexture = CreateGreenBackpackTexture();
-        }
-
-        private Texture2D CreateGreenBackpackTexture()
-        {
-            Texture2D tex = new Texture2D(Game1.graphics.GraphicsDevice, 12, 14);
-            Color G = new Color(80, 210, 60);
-            Color D = new Color(25, 90, 18);
-            Color Y = new Color(255, 220, 0);
-            Color O = new Color(230, 120, 30);
-            Color _ = Color.Transparent;
-
-            Color[] pixels = new Color[]
+            // Load the original backpack.png texture
+            try
             {
-                _, _, D, D, _, _, _, _, D, D, _, _,
-                _, D, G, G, D, _, _, D, G, G, D, _,
-                D, G, G, G, G, D, D, G, G, G, G, D,
-                D, G, G, G, G, G, G, G, G, G, G, D,
-                D, G, G, G, G, G, G, G, G, G, G, D,
-                D, G, G, G, G, G, G, G, G, G, G, D,
-                D, D, D, D, D, D, D, D, D, D, D, D,
-                D, G, G, G, G, Y, Y, G, G, G, G, D,
-                D, G, G, G, G, Y, O, G, G, G, G, D,
-                D, G, G, G, G, O, O, G, G, G, G, D,
-                D, G, G, G, G, G, G, G, G, G, G, D,
-                D, G, G, G, G, G, G, G, G, G, G, D,
-                _, D, G, G, G, G, G, G, G, G, D, _,
-                _, _, D, D, D, D, D, D, D, D, _, _
-            };
-
-            tex.SetData(pixels);
-            return tex;
+                backpackTexture = helper.ModContent.Load<Texture2D>("backpack.png");
+            }
+            catch (Exception ex)
+            {
+                Monitor.Log($"Could not load backpack.png: {ex.Message}", LogLevel.Warn);
+                backpackTexture = null;
+            }
         }
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
+            // Draw the green backpack resting flat on Pierre's counter
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
-                Vector2 worldPos = new Vector2(7 * 64 + 10, 18 * 64 - 36);
+                Vector2 worldPos = new Vector2(7 * 64 + 12, 18 * 64 - 34);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
-                e.SpriteBatch.Draw(
-                    greenBackpackTexture,
-                    screenPos,
-                    null,
-                    Color.White,
-                    0f,
-                    Vector2.Zero,
-                    4f,
-                    SpriteEffects.None,
-                    0.86f
-                );
+                if (backpackTexture != null)
+                {
+                    e.SpriteBatch.Draw(
+                        backpackTexture,
+                        screenPos,
+                        null,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        4f,
+                        SpriteEffects.None,
+                        0.86f
+                    );
+                }
             }
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
+            // Compact 4-row layout to prevent overlapping character profile
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage)
@@ -89,6 +72,7 @@ namespace AndroidBackpackPaging
                         int slotH = 50;
                         int stepY = 52;
 
+                        // Align rows 1 to 3 compactly
                         for (int r = 0; r < 3; r++)
                         {
                             for (int c = 0; c < 12; c++)
@@ -106,6 +90,7 @@ namespace AndroidBackpackPaging
                             }
                         }
 
+                        // Draw locked Row 4 slots if not yet purchased
                         if (Game1.player.MaxItems == 36)
                         {
                             int row4Y = startY + (3 * stepY);
@@ -134,6 +119,7 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
+                // Interaction with the green backpack on Pierre's counter
                 if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
                 {
                     Vector2 clickedTile = e.Cursor.Tile;
@@ -146,12 +132,13 @@ namespace AndroidBackpackPaging
 
                             var responses = new Response[]
                             {
-                                new Response("Purchase", $"Beli ({UPGRADE_PRICE:N0}g)"),
-                                new Response("NotNow", "Nanti saja")
+                                new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
+                                new Response("NotNow", "Not now")
                             };
 
+                            // Dialogue box
                             Game1.currentLocation.createQuestionDialogue(
-                                "Peningkatan Tas -- 48 slot",
+                                "Backpack Upgrade -- 48 slots",
                                 responses,
                                 new GameLocation.afterQuestionBehavior((farmer, answer) =>
                                 {
@@ -163,11 +150,11 @@ namespace AndroidBackpackPaging
                                             farmer.MaxItems = 48;
 
                                             Game1.playSound("reward");
-                                            Game1.showGlobalMessage("Peningkatan Tas Selesai! Tas kamu sekarang 4 Baris (48 Slot).");
+                                            Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
                                         }
                                         else
                                         {
-                                            Game1.drawObjectDialogue("Uangmu tidak cukup (Butuh 50.000g).");
+                                            Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
                                         }
                                     }
                                 })
