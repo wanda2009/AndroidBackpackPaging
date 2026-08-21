@@ -27,17 +27,9 @@ namespace AndroidBackpackPaging
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
-                if (File.Exists(imagePath))
-                {
-                    using (FileStream stream = File.OpenRead(imagePath))
-                    {
-                        backpackTexture = Texture2D.FromStream(Game1.graphics.GraphicsDevice, stream);
-                    }
-                }
-                else
-                {
-                    backpackTexture = helper.ModContent.Load<Texture2D>("backpack.png");
-                }
+                backpackTexture = File.Exists(imagePath)
+                    ? Texture2D.FromStream(Game1.graphics.GraphicsDevice, File.OpenRead(imagePath))
+                    : helper.ModContent.Load<Texture2D>("backpack.png");
             }
             catch
             {
@@ -52,17 +44,7 @@ namespace AndroidBackpackPaging
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, worldPos);
 
-                e.SpriteBatch.Draw(
-                    backpackTexture,
-                    screenPos,
-                    null,
-                    Color.White,
-                    0f,
-                    Vector2.Zero,
-                    3.0f,
-                    SpriteEffects.None,
-                    0.86f
-                );
+                e.SpriteBatch.Draw(backpackTexture, screenPos, null, Color.White, 0f, Vector2.Zero, 3.0f, SpriteEffects.None, 0.86f);
 
                 if (Game1.player.Tile.Y >= 17 && Math.Abs(Game1.player.Tile.X - 7) <= 2)
                 {
@@ -115,7 +97,7 @@ namespace AndroidBackpackPaging
 
         private void DrawPageButton(SpriteBatch b, int x, int y)
         {
-            int btnWidth = 62;  // Ukuran diperbesar (dari 54 ke 62)
+            int btnWidth = 62;
             int btnHeight = 62;
             pageButtonBounds = new Rectangle(x, y, btnWidth, btnHeight);
 
@@ -128,12 +110,11 @@ namespace AndroidBackpackPaging
                 pageButtonBounds.Y,
                 pageButtonBounds.Width,
                 pageButtonBounds.Height,
-                new Color(235, 60, 50), // Warna Merah Terang (Tema Tombol X)
+                new Color(235, 60, 50),
                 1f,
                 false
             );
 
-            // Teks satu angka besar ("1" atau "2")
             string label = (currentPage == 1) ? "1" : "2";
             SpriteFont font = Game1.dialogueFont;
             Vector2 textSize = font.MeasureString(label);
@@ -142,9 +123,7 @@ namespace AndroidBackpackPaging
                 pageButtonBounds.Y + (btnHeight - textSize.Y) / 2 - 2
             );
 
-            // Gambar bayangan hitam pekat
             b.DrawString(font, label, new Vector2(textPos.X + 2, textPos.Y + 2), Color.Black);
-            // Gambar angka putih terang (sangat kontras di atas kotak merah)
             b.DrawString(font, label, textPos, Color.White);
         }
 
@@ -200,7 +179,6 @@ namespace AndroidBackpackPaging
 
             Point touchPos = Game1.getMousePosition();
 
-            // Klik Tombol Merah Halaman di Menu Tas ATAU Menu Peti (Chest)
             if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
                 if (pageButtonBounds.Contains(touchPos))
@@ -212,7 +190,6 @@ namespace AndroidBackpackPaging
                 }
             }
 
-            // Beli Tas 48 Slot di Meja Pierre
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
                 Vector2 clickedTile = e.Cursor.Tile;
@@ -220,38 +197,37 @@ namespace AndroidBackpackPaging
                 if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
                 {
                     if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
+                    {
+                        Helper.Input.Suppress(e.Button);
+
+                        var responses = new Response[]
                         {
-                            Helper.Input.Suppress(e.Button);
+                            new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
+                            new Response("NotNow", "Not now")
+                        };
 
-                            var responses = new Response[]
+                        Game1.currentLocation.createQuestionDialogue(
+                            "Backpack Upgrade -- 48 slots",
+                            responses,
+                            new GameLocation.afterQuestionBehavior((farmer, answer) =>
                             {
-                                new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
-                                new Response("NotNow", "Not now")
-                            };
-
-                            Game1.currentLocation.createQuestionDialogue(
-                                "Backpack Upgrade -- 48 slots",
-                                responses,
-                                new GameLocation.afterQuestionBehavior((farmer, answer) =>
+                                if (answer == "Purchase")
                                 {
-                                    if (answer == "Purchase")
+                                    if (farmer.Money >= UPGRADE_PRICE)
                                     {
-                                        if (farmer.Money >= UPGRADE_PRICE)
-                                        {
-                                            farmer.Money -= UPGRADE_PRICE;
-                                            farmer.MaxItems = 48; // Buka 48 slot
+                                        farmer.Money -= UPGRADE_PRICE;
+                                        farmer.MaxItems = 48;
 
-                                            Game1.playSound("reward");
-                                            Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
-                                        }
-                                        else
-                                        {
-                                            Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
-                                        }
+                                        Game1.playSound("reward");
+                                        Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
                                     }
-                                })
-                            );
-                        }
+                                    else
+                                    {
+                                        Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
+                                    }
+                                }
+                            })
+                        );
                     }
                 }
             }
