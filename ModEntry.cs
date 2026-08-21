@@ -15,13 +15,13 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int Price = 50000;
-        private bool isPage2 = false;
+        private int currentOffset = 0; // 0 = Baris 1-3, 1 = Baris 2-4
         private Rectangle pageBtnBox;
 
         public override void Entry(IModHelper helper)
         {
             helper.Events.Display.RenderedWorld += OnRenderedWorld;
-            helper.Events.Display.MenuChanged += (s, e) => { ResetToPage1(); };
+            helper.Events.Display.MenuChanged += OnMenuChanged;
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
@@ -44,32 +44,30 @@ namespace AndroidBackpackPaging
             }
         }
 
-        // FUNGSI PENDETEKSI INVENTORY DI SEMUA MENU (UNIVERSAL)
-        private InventoryMenu GetActiveInventory(IClickableMenu menu)
+        private void OnMenuChanged(object s, MenuChangedEventArgs e)
         {
-            if (menu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage ip)
-                return ip.inventory;
-            if (menu is ItemGrabMenu grab)
-                return grab.inventory;
-            if (menu is ShopMenu shop)
-                return shop.inventory;
-            if (menu is JunimoNoteMenu jnote)
-                return jnote.inventory;
-            return null;
+            if (currentOffset == 1 && Game1.player.MaxItems == 48)
+            {
+                ShiftInventory(false);
+                currentOffset = 0;
+            }
+            Ensure48();
         }
 
         private void OnRenderedActiveMenu(object s, RenderedActiveMenuEventArgs e)
         {
             if (Game1.player.MaxItems != 48) return;
-            Ensure48Slots();
+            Ensure48();
 
-            // Tampilkan tombol di SEMUA menu yang memiliki tas
-            var inv = GetActiveInventory(Game1.activeClickableMenu);
-            if (inv != null && inv.inventory.Count >= 12)
+            if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage ip && ip.inventory != null)
             {
-                int btnX = inv.inventory[11].bounds.Right + 8;
-                int btnY = inv.inventory[0].bounds.Y;
-                DrawBtn(e.SpriteBatch, btnX, btnY);
+                if (ip.inventory.inventory.Count >= 12)
+                    DrawBtn(e.SpriteBatch, ip.inventory.inventory[11].bounds.Right + 8, ip.inventory.inventory[0].bounds.Y);
+            }
+            else if (Game1.activeClickableMenu is ItemGrabMenu grab && grab.inventory != null)
+            {
+                if (grab.inventory.inventory.Count >= 12)
+                    DrawBtn(e.SpriteBatch, grab.inventory.inventory[11].bounds.Right + 8, grab.inventory.inventory[0].bounds.Y);
             }
         }
 
@@ -78,7 +76,7 @@ namespace AndroidBackpackPaging
             pageBtnBox = new Rectangle(x, y, 52, 52);
             IClickableMenu.drawTextureBox(b, Game1.menuTexture, new Rectangle(0, 256, 60, 60), x, y, 52, 52, new Color(235, 60, 50), 1f, false);
 
-            string label = isPage2 ? "2" : "1";
+            string label = (currentOffset == 1) ? "2" : "1";
             SpriteFont font = Game1.dialogueFont;
             Vector2 sz = font.MeasureString(label);
             Vector2 pos = new Vector2(x + (52 - sz.X) / 2, y + (52 - sz.Y) / 2 - 2);
@@ -87,7 +85,7 @@ namespace AndroidBackpackPaging
             b.DrawString(font, label, pos, Color.White);
         }
 
-        private void Ensure48Slots()
+        private void Ensure48()
         {
             if (Game1.player.MaxItems == 48)
             {
@@ -96,84 +94,62 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void TogglePage()
+        private void ShiftInventory(bool forward)
         {
             if (Game1.player.MaxItems != 48) return;
-            Ensure48Slots();
+            Ensure48();
 
             Game1.playSound("shwip");
 
-            // Tukar isi Baris 3 (index 24..35) dengan Baris 4 (index 36..47)
-            for (int i = 0; i < 12; i++)
+            if (forward) // Pindah ke Baris 2-4
             {
-                Item temp = Game1.player.Items[24 + i];
-                Game1.player.Items[24 + i] = Game1.player.Items[36 + i];
-                Game1.player.Items[36 + i] = temp;
-            }
-
-            isPage2 = !isPage2;
-        }
-
-        private void ResetToPage1()
-        {
-            if (isPage2 && Game1.player.MaxItems == 48)
-            {
-                Ensure48Slots();
+                List<Item> row1 = new List<Item>();
                 for (int i = 0; i < 12; i++)
-                {
-                    Item temp = Game1.player.Items[24 + i];
-                    Game1.player.Items[24 + i] = Game1.player.Items[36 + i];
-                    Game1.player.Items[36 + i] = temp;
-                }
-                isPage2 = false;
+                    row1.Add(Game1.player.Items[i]);
+
+                for (int i = 12; i < 48; i++)
+                    Game1.player.Items[i - 12] = Game1.player.Items[i];
+
+                for (int i = 0; i < 12; i++)
+                    Game1.player.Items[36 + i] = row1[i];
+            }
+            else // Kembali ke Baris 1-3
+            {
+                List<Item> row4 = new List<Item>();
+                for (int i = 36; i < 48; i++)
+                    row4.Add(Game1.player.Items[i]);
+
+                for (int i = 35; i >= 0; i--)
+                    Game1.player.Items[i + 12] = Game1.player.Items[i];
+
+                for (int i = 0; i < 12; i++)
+                    Game1.player.Items[i] = row4[i];
             }
         }
 
+        // FUNGSI SORTIR YANG DIPERBAIKI SANGAT STABIL
         private void ForceOrganize48()
         {
-            ResetToPage1();
-            Ensure48Slots();
-
-            List<Item> tools = new List<Item>();
-            List<Item> otherItems = new List<Item>();
-
-            for (int i = 0; i < 48; i++)
+            // Reset offset dulu ke tampilan awal (Halaman 1)
+            if (currentOffset == 1)
             {
-                Item it = Game1.player.Items[i];
-                if (it == null) continue;
-
-                if (it is Tool || it is MeleeWeapon || it is Slingshot || it is FishingRod)
-                {
-                    tools.Add(it);
-                }
-                else
-                {
-                    otherItems.Add(it);
-                }
+                ShiftInventory(false);
+                currentOffset = 0;
             }
 
-            otherItems.Sort((a, b) =>
-            {
-                int c = b.Category.CompareTo(a.Category);
-                if (c != 0) return c;
-                return string.Compare(a.QualifiedItemId, b.QualifiedItemId, StringComparison.OrdinalIgnoreCase);
-            });
+            Ensure48();
 
-            for (int i = 0; i < 48; i++)
-                Game1.player.Items[i] = null;
-
-            int targetIndex = 0;
-            foreach (var t in tools)
-            {
-                if (targetIndex < 48) Game1.player.Items[targetIndex++] = t;
-            }
-            foreach (var o in otherItems)
-            {
-                if (targetIndex < 48) Game1.player.Items[targetIndex++] = o;
-            }
+            // Gunakan logika bawaan Stardew Valley untuk merapikan item seluruh 48 slot
+            ItemGrabMenu.organizeItemsInList(Game1.player.Items);
 
             Game1.playSound("Ship");
-            Game1.showGlobalMessage("Inventory Organized (48 Slots)!");
+            Game1.showGlobalMessage("Inventory Organized!");
+
+            // Refresh UI Menu secara aman
+            if (Game1.activeClickableMenu is GameMenu)
+            {
+                Game1.activeClickableMenu = new GameMenu(0);
+            }
         }
 
         private void OnButtonPressed(object s, ButtonPressedEventArgs e)
@@ -184,36 +160,55 @@ namespace AndroidBackpackPaging
             Vector2 scaled = Utility.ModifyCoordinatesForUIScale(new Vector2(mousePos.X, mousePos.Y));
             Point uiPos = new Point((int)scaled.X, (int)scaled.Y);
 
-            // 1. KLIK TOMBOL MERAH DI SEMUA MENU (UNIVERSAL)
-            if (Game1.player.MaxItems == 48 && GetActiveInventory(Game1.activeClickableMenu) != null)
+            // 1. KLIK TOMBOL MERAH HALAMAN [1] & [2]
+            if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
                 Rectangle touch = new Rectangle(pageBtnBox.X - 12, pageBtnBox.Y - 12, pageBtnBox.Width + 24, pageBtnBox.Height + 24);
                 if (touch.Contains(mousePos) || touch.Contains(uiPos))
                 {
                     Helper.Input.Suppress(e.Button);
-                    TogglePage();
+
+                    if (currentOffset == 0)
+                    {
+                        ShiftInventory(true);
+                        currentOffset = 1;
+                    }
+                    else
+                    {
+                        ShiftInventory(false);
+                        currentOffset = 0;
+                    }
+
+                    if (Game1.activeClickableMenu is GameMenu)
+                    {
+                        Game1.activeClickableMenu = new GameMenu(0);
+                    }
                     return;
                 }
             }
 
-            // 2. KLIK TOMBOL SORTIR DI MENU TAS UTAMA
+            // 2. KLIK TOMBOL SORTIR DI MENU TAS UTAMA (INVENTORY PAGE)
             if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage ip && ip.organizeButton != null)
             {
-                Vector2 orgCenter = new Vector2(ip.organizeButton.bounds.Center.X, ip.organizeButton.bounds.Center.Y);
-                if (Vector2.Distance(new Vector2(mousePos.X, mousePos.Y), orgCenter) <= 45f || Vector2.Distance(scaled, orgCenter) <= 45f)
+                if (ip.organizeButton.containsPoint(mousePos.X, mousePos.Y) || ip.organizeButton.containsPoint((int)scaled.X, (int)scaled.Y))
                 {
                     Helper.Input.Suppress(e.Button);
                     ForceOrganize48();
                     return;
                 }
             }
-            // 3. KLIK TOMBOL SORTIR DI MENU PETI (CHEST)
-            else if (Game1.activeClickableMenu is ItemGrabMenu grab && grab.organizeButton != null)
+
+            // 3. KLIK TOMBOL SORTIR DI MENU PETI (CHEST / ITEM GRAB MENU)
+            if (Game1.activeClickableMenu is ItemGrabMenu grab && grab.organizeButton != null)
             {
-                Vector2 orgCenter = new Vector2(grab.organizeButton.bounds.Center.X, grab.organizeButton.bounds.Center.Y);
-                if (Vector2.Distance(new Vector2(mousePos.X, mousePos.Y), orgCenter) <= 45f || Vector2.Distance(scaled, orgCenter) <= 45f)
+                if (grab.organizeButton.containsPoint(mousePos.X, mousePos.Y) || grab.organizeButton.containsPoint((int)scaled.X, (int)scaled.Y))
                 {
-                    ResetToPage1();
+                    if (currentOffset == 1)
+                    {
+                        ShiftInventory(false);
+                        currentOffset = 0;
+                    }
+                    // Biarkan game native memproses sortir chest bawaan tanpa Suppress
                 }
             }
 
