@@ -189,7 +189,8 @@ namespace AndroidBackpackPaging
             if (!Context.IsWorldReady || e.Button != SButton.MouseLeft) return;
 
             Point mousePos = Game1.getMousePosition();
-            Point uiPos = new Point((int)Utility.ModifyCoordinatesForUIScale(mousePos.X), (int)Utility.ModifyCoordinatesForUIScale(mousePos.Y));
+            Vector2 scaledVec = Utility.ModifyCoordinatesForUIScale(new Vector2(mousePos.X, mousePos.Y));
+            Point uiPos = new Point((int)scaledVec.X, (int)scaledVec.Y);
 
             // 1. DETEKSI KLIK TOMBOL MERAH HALAMAN (DENGAN AREA BANTALAN + DUAL KOORDINAT)
             if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
@@ -223,9 +224,10 @@ namespace AndroidBackpackPaging
             {
                 if (grabMenu.organizeButton.containsPoint(mousePos.X, mousePos.Y) || grabMenu.organizeButton.containsPoint(uiPos.X, uiPos.Y))
                 {
-                    Helper.Input.Suppress(e.Button);
-                    OrganizeAll48Slots();
-                    return;
+                    if (currentPage == 2)
+                    {
+                        SwitchPage(1);
+                    }
                 }
             }
 
