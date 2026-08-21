@@ -15,7 +15,6 @@ namespace AndroidBackpackPaging
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
-        // Variabel Scrollbar & Sentuhan
         private float currentScroll = 0f;
         private float targetScroll = 0f;
         private int touchStartY = -1;
@@ -33,7 +32,6 @@ namespace AndroidBackpackPaging
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonReleased += OnButtonReleased;
 
-            // Muat file gambar asli backpack.png
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -57,7 +55,6 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Tampilkan tas di meja Pierre & player di depan tas
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -92,13 +89,11 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            // 1. UPDATE DRAG SCROLLBAR REAL-TIME
             if (isDraggingScrollbar && Helper.Input.IsDown(SButton.MouseLeft))
             {
                 UpdateScrollbarDrag(Game1.getMousePosition().Y);
             }
 
-            // 2. ANIMASI MELUNCUR HALUS
             if (Math.Abs(currentScroll - targetScroll) > 0.001f)
             {
                 currentScroll = MathHelper.Lerp(currentScroll, targetScroll, 0.25f);
@@ -118,7 +113,7 @@ namespace AndroidBackpackPaging
                     int startY = invMenu.yPositionOnScreen;
                     int pixelShift = (int)(currentScroll * slotSize);
 
-                    // Geser koordinat 48 slot secara halus
+                    // 1. GESER SLOT DI LAPISAN BELAKANG
                     for (int r = 0; r < 4; r++)
                     {
                         for (int c = 0; c < 12; c++)
@@ -136,50 +131,11 @@ namespace AndroidBackpackPaging
                         }
                     }
 
-                    // 3. GAMBAR SCROLLBAR ASLI VANILLA (DIPANJANGKAN & RAMPING PERSIS MENU CRAFTING)
-                    int trackX = startX + (12 * slotSize) + 12;
-                    int trackY = startY + 2;
-                    int trackWidth = 16;
-                    int trackHeight = (3 * slotSize) + 4; // Dipanjangkan pas menjangkau seluruh tas
-                    int thumbHeight = 44;
-                    int thumbY = trackY + (int)(currentScroll * (trackHeight - thumbHeight));
-
-                    trackBounds = new Rectangle(trackX - 6, trackY, trackWidth + 12, trackHeight);
-                    thumbBounds = new Rectangle(trackX, thumbY, trackWidth, thumbHeight);
-
-                    // Gambar Jalur Abu-abu Resmi Game (Track)
-                    IClickableMenu.drawTextureBox(
-                        e.SpriteBatch,
-                        Game1.mouseCursors,
-                        new Rectangle(403, 383, 6, 6),
-                        trackX,
-                        trackY,
-                        trackWidth,
-                        trackHeight,
-                        Color.White,
-                        4f,
-                        false
-                    );
-
-                    // Gambar Balok Slider Kayu/Emas Resmi Game (Thumb)
-                    IClickableMenu.drawTextureBox(
-                        e.SpriteBatch,
-                        Game1.mouseCursors,
-                        new Rectangle(435, 463, 6, 10),
-                        trackX,
-                        thumbY,
-                        trackWidth,
-                        thumbHeight,
-                        Color.White,
-                        4f,
-                        false
-                    );
-
-                    // 4. TRIK PENUTUP BAWAH: Gambar penutup krem & garis cokelat agar item menyelam ke belakang profil
-                    int dividerY = startY + (3 * slotSize) + 4;
+                    // 2. TIRAI LANTAI BAWAH: Tutup area profil di bawah & garis pembatas
+                    int dividerY = startY + (3 * slotSize) + 2;
                     int bottomHeight = (gameMenu.yPositionOnScreen + gameMenu.height) - dividerY;
 
-                    // Tutup area bawah dengan kotak krem resmi
+                    // Kotak latar penutup bawah
                     IClickableMenu.drawTextureBox(
                         e.SpriteBatch,
                         Game1.menuTexture,
@@ -193,15 +149,57 @@ namespace AndroidBackpackPaging
                         false
                     );
 
-                    // Gambar ulang Garis Pembatas Cokelat tebal di depan
+                    // Garis pembatas cokelat tebal
                     e.SpriteBatch.Draw(
                         Game1.staminaRect,
                         new Rectangle(gameMenu.xPositionOnScreen + 16, dividerY, gameMenu.width - 32, 6),
                         new Color(185, 95, 25)
                     );
 
-                    // Gambar ulang seluruh panel profil (Foto, Nama, Uang) di lapisan paling depan
+                    // Gambar ulang seluruh isi panel profil (Foto, Nama, Uang) di DEPAN penutup
                     invPage.draw(e.SpriteBatch);
+
+                    // 3. TIRAI ATAP ATAS: Gambar ulang seluruh TAB ATAS (Tas, Hati, Map, tombol X) agar DI PALING DEPAN
+                    gameMenu.draw(e.SpriteBatch);
+
+                    // 4. GAMBAR SCROLLBAR ASLI (POSISI PAS DI ANTARA SLOT 12 & TONG SAMPAH)
+                    int trackX = invMenu.inventory[11].bounds.Right + 8;
+                    int trackY = startY + 4;
+                    int trackWidth = 16;
+                    int trackHeight = (3 * slotSize) - 8;
+                    int thumbHeight = 44;
+                    int thumbY = trackY + (int)(currentScroll * (trackHeight - thumbHeight));
+
+                    trackBounds = new Rectangle(trackX - 6, trackY, trackWidth + 12, trackHeight);
+                    thumbBounds = new Rectangle(trackX, thumbY, trackWidth, thumbHeight);
+
+                    // Jalur Abu-abu Resmi
+                    IClickableMenu.drawTextureBox(
+                        e.SpriteBatch,
+                        Game1.mouseCursors,
+                        new Rectangle(403, 383, 6, 6),
+                        trackX,
+                        trackY,
+                        trackWidth,
+                        trackHeight,
+                        Color.White,
+                        4f,
+                        false
+                    );
+
+                    // Balok Slider Kayu/Emas Resmi
+                    IClickableMenu.drawTextureBox(
+                        e.SpriteBatch,
+                        Game1.mouseCursors,
+                        new Rectangle(435, 463, 6, 10),
+                        trackX,
+                        thumbY,
+                        trackWidth,
+                        thumbHeight,
+                        Color.White,
+                        4f,
+                        false
+                    );
                 }
             }
         }
@@ -254,7 +252,7 @@ namespace AndroidBackpackPaging
                 {
                     Point touchPos = Game1.getMousePosition();
 
-                    // 1. Sentuh / Tarik Langsung Slider Scrollbar
+                    // Sentuh / Seret Slider Scrollbar
                     if (trackBounds.Contains(touchPos) || thumbBounds.Contains(touchPos))
                     {
                         Helper.Input.Suppress(e.Button);
@@ -263,7 +261,7 @@ namespace AndroidBackpackPaging
                         return;
                     }
 
-                    // 2. Sentuh Area Tas untuk Gestur Swipe
+                    // Sentuh Area Tas untuk Swipe
                     if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                     {
                         var invMenu = invPage.inventory;
@@ -305,7 +303,7 @@ namespace AndroidBackpackPaging
                                         if (farmer.Money >= UPGRADE_PRICE)
                                         {
                                             farmer.Money -= UPGRADE_PRICE;
-                                            farmer.MaxItems = 48; // Buka 48 slot
+                                            farmer.MaxItems = 48;
 
                                             Game1.playSound("reward");
                                             Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
@@ -329,7 +327,6 @@ namespace AndroidBackpackPaging
             {
                 isDraggingScrollbar = false;
 
-                // Gestur Swipe dengan batas mentok
                 if (isSwiping && touchStartY >= 0)
                 {
                     if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
@@ -338,12 +335,12 @@ namespace AndroidBackpackPaging
 
                         if (deltaY > 25 && targetScroll < 1f)
                         {
-                            targetScroll = 1f; // Mentok Bawah
+                            targetScroll = 1f;
                             Game1.playSound("shwip");
                         }
                         else if (deltaY < -25 && targetScroll > 0f)
                         {
-                            targetScroll = 0f; // Mentok Atas
+                            targetScroll = 0f;
                             Game1.playSound("shwip");
                         }
                     }
