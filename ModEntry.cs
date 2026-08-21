@@ -15,8 +15,7 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int Price = 50000;
-        private int currentOffset = 0; // 0 = Halaman 1 (Baris 1-3), 1 = Halaman 2 (Baris 2-4)
-        private List<Item> masterSlots = new List<Item>();
+        private bool isPage2 = false;
         private Rectangle pageBtnBox;
 
         public override void Entry(IModHelper helper)
@@ -45,20 +44,32 @@ namespace AndroidBackpackPaging
             }
         }
 
+        // FUNGSI PENDETEKSI INVENTORY DI SEMUA MENU (UNIVERSAL)
+        private InventoryMenu GetActiveInventory(IClickableMenu menu)
+        {
+            if (menu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage ip)
+                return ip.inventory;
+            if (menu is ItemGrabMenu grab)
+                return grab.inventory;
+            if (menu is ShopMenu shop)
+                return shop.inventory;
+            if (menu is JunimoNoteMenu jnote)
+                return jnote.inventory;
+            return null;
+        }
+
         private void OnRenderedActiveMenu(object s, RenderedActiveMenuEventArgs e)
         {
             if (Game1.player.MaxItems != 48) return;
-            EnsureMasterSlots();
+            Ensure48Slots();
 
-            if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage ip && ip.inventory != null)
+            // Tampilkan tombol di SEMUA menu yang memiliki tas
+            var inv = GetActiveInventory(Game1.activeClickableMenu);
+            if (inv != null && inv.inventory.Count >= 12)
             {
-                if (ip.inventory.inventory.Count >= 12)
-                    DrawBtn(e.SpriteBatch, ip.inventory.inventory[11].bounds.Right + 8, ip.inventory.inventory[0].bounds.Y);
-            }
-            else if (Game1.activeClickableMenu is ItemGrabMenu grab && grab.inventory != null)
-            {
-                if (grab.inventory.inventory.Count >= 12)
-                    DrawBtn(e.SpriteBatch, grab.inventory.inventory[11].bounds.Right + 8, grab.inventory.inventory[0].bounds.Y);
+                int btnX = inv.inventory[11].bounds.Right + 8;
+                int btnY = inv.inventory[0].bounds.Y;
+                DrawBtn(e.SpriteBatch, btnX, btnY);
             }
         }
 
@@ -67,7 +78,7 @@ namespace AndroidBackpackPaging
             pageBtnBox = new Rectangle(x, y, 52, 52);
             IClickableMenu.drawTextureBox(b, Game1.menuTexture, new Rectangle(0, 256, 60, 60), x, y, 52, 52, new Color(235, 60, 50), 1f, false);
 
-            string label = (currentOffset == 1) ? "2" : "1";
+            string label = isPage2 ? "2" : "1";
             SpriteFont font = Game1.dialogueFont;
             Vector2 sz = font.MeasureString(label);
             Vector2 pos = new Vector2(x + (52 - sz.X) / 2, y + (52 - sz.Y) / 2 - 2);
@@ -76,95 +87,90 @@ namespace AndroidBackpackPaging
             b.DrawString(font, label, pos, Color.White);
         }
 
-        private void EnsureMasterSlots()
+        private void Ensure48Slots()
         {
-            while (masterSlots.Count < 48)
-                masterSlots.Add(null);
-
-            for (int i = 0; i < Math.Min(Game1.player.Items.Count, 48); i++)
+            if (Game1.player.MaxItems == 48)
             {
-                if (masterSlots[i] == null && Game1.player.Items[i] != null)
-                    masterSlots[i] = Game1.player.Items[i];
+                while (Game1.player.Items.Count < 48)
+                    Game1.player.Items.Add(null);
             }
         }
 
-        private void SyncActiveViewToMaster()
+        private void TogglePage()
         {
-            EnsureMasterSlots();
-            int start = currentOffset * 12;
-            for (int i = 0; i < 36; i++)
-            {
-                if (i < Game1.player.Items.Count)
-                    masterSlots[start + i] = Game1.player.Items[i];
-            }
-        }
-
-        private void LoadViewFromMaster(int newOffset)
-        {
-            EnsureMasterSlots();
-            currentOffset = newOffset;
-            int start = currentOffset * 12;
-
-            for (int i = 0; i < 36; i++)
-            {
-                if (i < Game1.player.Items.Count)
-                    Game1.player.Items[i] = masterSlots[start + i];
-            }
-        }
-
-        private void SwitchPage(int newOffset)
-        {
-            if (newOffset == currentOffset || Game1.player.MaxItems != 48) return;
+            if (Game1.player.MaxItems != 48) return;
+            Ensure48Slots();
 
             Game1.playSound("shwip");
-            SyncActiveViewToMaster();
-            LoadViewFromMaster(newOffset);
+
+            // Tukar isi Baris 3 (index 24..35) dengan Baris 4 (index 36..47)
+            for (int i = 0; i < 12; i++)
+            {
+                Item temp = Game1.player.Items[24 + i];
+                Game1.player.Items[24 + i] = Game1.player.Items[36 + i];
+                Game1.player.Items[36 + i] = temp;
+            }
+
+            isPage2 = !isPage2;
         }
 
         private void ResetToPage1()
         {
-            if (currentOffset == 1 && Game1.player.MaxItems == 48)
+            if (isPage2 && Game1.player.MaxItems == 48)
             {
-                SyncActiveViewToMaster();
-                LoadViewFromMaster(0);
+                Ensure48Slots();
+                for (int i = 0; i < 12; i++)
+                {
+                    Item temp = Game1.player.Items[24 + i];
+                    Game1.player.Items[24 + i] = Game1.player.Items[36 + i];
+                    Game1.player.Items[36 + i] = temp;
+                }
+                isPage2 = false;
             }
-            currentOffset = 0;
         }
 
-        private void SmartOrganize48()
+        private void ForceOrganize48()
         {
-            SyncActiveViewToMaster();
-            EnsureMasterSlots();
+            ResetToPage1();
+            Ensure48Slots();
 
             List<Item> tools = new List<Item>();
-            List<Item> nonTools = new List<Item>();
+            List<Item> otherItems = new List<Item>();
 
             for (int i = 0; i < 48; i++)
             {
-                Item it = masterSlots[i];
+                Item it = Game1.player.Items[i];
                 if (it == null) continue;
 
                 if (it is Tool || it is MeleeWeapon || it is Slingshot || it is FishingRod)
+                {
                     tools.Add(it);
+                }
                 else
-                    nonTools.Add(it);
+                {
+                    otherItems.Add(it);
+                }
             }
 
-            nonTools.Sort((a, b) =>
+            otherItems.Sort((a, b) =>
             {
-                int catCompare = b.Category.CompareTo(a.Category);
-                if (catCompare != 0) return catCompare;
+                int c = b.Category.CompareTo(a.Category);
+                if (c != 0) return c;
                 return string.Compare(a.QualifiedItemId, b.QualifiedItemId, StringComparison.OrdinalIgnoreCase);
             });
 
-            masterSlots.Clear();
-            masterSlots.AddRange(tools);
-            masterSlots.AddRange(nonTools);
+            for (int i = 0; i < 48; i++)
+                Game1.player.Items[i] = null;
 
-            while (masterSlots.Count < 48)
-                masterSlots.Add(null);
-
-            LoadViewFromMaster(0);
+            int targetIndex = 0;
+            foreach (var t in tools)
+            {
+                if (targetIndex < 48) Game1.player.Items[targetIndex++] = t;
+            }
+            foreach (var o in otherItems)
+            {
+                if (targetIndex < 48) Game1.player.Items[targetIndex++] = o;
+            }
 
             Game1.playSound("Ship");
             Game1.showGlobalMessage("Inventory Organized (48 Slots)!");
@@ -178,41 +184,40 @@ namespace AndroidBackpackPaging
             Vector2 scaled = Utility.ModifyCoordinatesForUIScale(new Vector2(mousePos.X, mousePos.Y));
             Point uiPos = new Point((int)scaled.X, (int)scaled.Y);
 
-            // 1. Tombol Merah Halaman [1] & [2]
-            if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
+            // 1. KLIK TOMBOL MERAH DI SEMUA MENU (UNIVERSAL)
+            if (Game1.player.MaxItems == 48 && GetActiveInventory(Game1.activeClickableMenu) != null)
             {
-                Rectangle touch = new Rectangle(pageBtnBox.X - 10, pageBtnBox.Y - 10, pageBtnBox.Width + 20, pageBtnBox.Height + 20);
+                Rectangle touch = new Rectangle(pageBtnBox.X - 12, pageBtnBox.Y - 12, pageBtnBox.Width + 24, pageBtnBox.Height + 24);
                 if (touch.Contains(mousePos) || touch.Contains(uiPos))
                 {
                     Helper.Input.Suppress(e.Button);
-                    int next = (currentOffset == 0) ? 1 : 0;
-                    SwitchPage(next);
+                    TogglePage();
                     return;
                 }
             }
 
-            // 2. Tombol Sortir di Menu Tas
+            // 2. KLIK TOMBOL SORTIR DI MENU TAS UTAMA
             if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage ip && ip.organizeButton != null)
             {
-                Rectangle org = new Rectangle(ip.organizeButton.bounds.X - 12, ip.organizeButton.bounds.Y - 12, ip.organizeButton.bounds.Width + 24, ip.organizeButton.bounds.Height + 24);
-                if (org.Contains(mousePos) || org.Contains(uiPos))
+                Vector2 orgCenter = new Vector2(ip.organizeButton.bounds.Center.X, ip.organizeButton.bounds.Center.Y);
+                if (Vector2.Distance(new Vector2(mousePos.X, mousePos.Y), orgCenter) <= 45f || Vector2.Distance(scaled, orgCenter) <= 45f)
                 {
                     Helper.Input.Suppress(e.Button);
-                    SmartOrganize48();
+                    ForceOrganize48();
                     return;
                 }
             }
-            // 3. Tombol Sortir di Menu Peti (Chest)
+            // 3. KLIK TOMBOL SORTIR DI MENU PETI (CHEST)
             else if (Game1.activeClickableMenu is ItemGrabMenu grab && grab.organizeButton != null)
             {
-                Rectangle org = new Rectangle(grab.organizeButton.bounds.X - 12, grab.organizeButton.bounds.Y - 12, grab.organizeButton.bounds.Width + 24, grab.organizeButton.bounds.Height + 24);
-                if (org.Contains(mousePos) || org.Contains(uiPos))
+                Vector2 orgCenter = new Vector2(grab.organizeButton.bounds.Center.X, grab.organizeButton.bounds.Center.Y);
+                if (Vector2.Distance(new Vector2(mousePos.X, mousePos.Y), orgCenter) <= 45f || Vector2.Distance(scaled, orgCenter) <= 45f)
                 {
                     ResetToPage1();
                 }
             }
 
-            // 4. Beli Tas 48 Slot di Meja Pierre
+            // 4. BELI TAS 48 SLOT DI MEJA PIERRE
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
                 Vector2 t = e.Cursor.Tile;
@@ -228,7 +233,6 @@ namespace AndroidBackpackPaging
                             {
                                 who.Money -= Price;
                                 who.MaxItems = 48;
-                                EnsureMasterSlots();
                                 Game1.playSound("reward");
                                 Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
                             }
