@@ -14,7 +14,7 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
-        private int currentPage = 1; // 1 = Halaman 1, 2 = Halaman 2
+        private int currentPage = 1;
         private Rectangle pageButtonBounds;
 
         public override void Entry(IModHelper helper)
@@ -76,8 +76,8 @@ namespace AndroidBackpackPaging
                     var inv = invPage.inventory;
                     if (inv.inventory.Count >= 12)
                     {
-                        int btnX = inv.inventory[11].bounds.Right + 10;
-                        int btnY = inv.inventory[0].bounds.Y + 2;
+                        int btnX = inv.inventory[11].bounds.Right + 8;
+                        int btnY = inv.inventory[0].bounds.Y;
                         DrawPageButton(e.SpriteBatch, btnX, btnY);
                     }
                 }
@@ -88,8 +88,8 @@ namespace AndroidBackpackPaging
                 var inv = grabMenu.inventory;
                 if (inv.inventory.Count >= 12)
                 {
-                    int btnX = inv.inventory[11].bounds.Right + 10;
-                    int btnY = inv.inventory[0].bounds.Y + 2;
+                    int btnX = inv.inventory[11].bounds.Right + 8;
+                    int btnY = inv.inventory[0].bounds.Y;
                     DrawPageButton(e.SpriteBatch, btnX, btnY);
                 }
             }
@@ -97,11 +97,10 @@ namespace AndroidBackpackPaging
 
         private void DrawPageButton(SpriteBatch b, int x, int y)
         {
-            int btnWidth = 62;
-            int btnHeight = 62;
-            pageButtonBounds = new Rectangle(x, y, btnWidth, btnHeight);
+            int btnSize = 52;
+            pageButtonBounds = new Rectangle(x, y, btnSize, btnSize);
 
-            // Kotak tombol merah seperti tombol X
+            // Kotak tombol merah terang (Tema tombol X)
             IClickableMenu.drawTextureBox(
                 b,
                 Game1.menuTexture,
@@ -119,8 +118,8 @@ namespace AndroidBackpackPaging
             SpriteFont font = Game1.dialogueFont;
             Vector2 textSize = font.MeasureString(label);
             Vector2 textPos = new Vector2(
-                pageButtonBounds.X + (btnWidth - textSize.X) / 2,
-                pageButtonBounds.Y + (btnHeight - textSize.Y) / 2 - 2
+                pageButtonBounds.X + (btnSize - textSize.X) / 2,
+                pageButtonBounds.Y + (btnSize - textSize.Y) / 2 - 2
             );
 
             b.DrawString(font, label, new Vector2(textPos.X + 2, textPos.Y + 2), Color.Black);
@@ -175,7 +174,6 @@ namespace AndroidBackpackPaging
 
         private void OrganizeAll48Slots()
         {
-            // Kembalikan ke Halaman 1 dulu sebelum sortir agar urutannya rapi
             if (currentPage == 2)
             {
                 SwitchPage(1);
@@ -190,12 +188,14 @@ namespace AndroidBackpackPaging
         {
             if (!Context.IsWorldReady || e.Button != SButton.MouseLeft) return;
 
-            Point touchPos = Game1.getMousePosition();
+            Point mousePos = Game1.getMousePosition();
+            Point uiPos = new Point((int)Utility.ModifyCoordinatesForUIScale(mousePos.X), (int)Utility.ModifyCoordinatesForUIScale(mousePos.Y));
 
-            // 1. Klik Tombol Merah Halaman di Menu Tas ATAU Menu Peti (Chest)
+            // 1. DETEKSI KLIK TOMBOL MERAH HALAMAN (DENGAN AREA BANTALAN + DUAL KOORDINAT)
             if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
-                if (pageButtonBounds.Contains(touchPos))
+                Rectangle touchArea = new Rectangle(pageButtonBounds.X - 8, pageButtonBounds.Y - 8, pageButtonBounds.Width + 16, pageButtonBounds.Height + 16);
+                if (touchArea.Contains(mousePos) || touchArea.Contains(uiPos))
                 {
                     Helper.Input.Suppress(e.Button);
                     int next = (currentPage == 1) ? 2 : 1;
@@ -204,12 +204,12 @@ namespace AndroidBackpackPaging
                 }
             }
 
-            // 2. DETEKSI KLIK TOMBOL SORTIR RESMI DI MENU TAS
+            // 2. DETEKSI KLIK TOMBOL SORTIR DI MENU TAS
             if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0)
             {
                 if (gm.GetCurrentPage() is InventoryPage invPage && invPage.organizeButton != null)
                 {
-                    if (invPage.organizeButton.containsPoint(touchPos.X, touchPos.Y))
+                    if (invPage.organizeButton.containsPoint(mousePos.X, mousePos.Y) || invPage.organizeButton.containsPoint(uiPos.X, uiPos.Y))
                     {
                         Helper.Input.Suppress(e.Button);
                         OrganizeAll48Slots();
@@ -221,13 +221,11 @@ namespace AndroidBackpackPaging
             // 3. DETEKSI KLIK TOMBOL SORTIR DI MENU PETI (CHEST)
             if (Game1.activeClickableMenu is ItemGrabMenu grabMenu && grabMenu.organizeButton != null)
             {
-                if (grabMenu.organizeButton.containsPoint(touchPos.X, touchPos.Y))
+                if (grabMenu.organizeButton.containsPoint(mousePos.X, mousePos.Y) || grabMenu.organizeButton.containsPoint(uiPos.X, uiPos.Y))
                 {
-                    // Sortir isi tas bawah
-                    if (currentPage == 2)
-                    {
-                        SwitchPage(1);
-                    }
+                    Helper.Input.Suppress(e.Button);
+                    OrganizeAll48Slots();
+                    return;
                 }
             }
 
@@ -258,7 +256,7 @@ namespace AndroidBackpackPaging
                                     if (farmer.Money >= UPGRADE_PRICE)
                                     {
                                         farmer.Money -= UPGRADE_PRICE;
-                                        farmer.MaxItems = 48;
+                                        farmer.MaxItems = 48; // Buka 48 slot
 
                                         Game1.playSound("reward");
                                         Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
