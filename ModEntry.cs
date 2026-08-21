@@ -15,8 +15,7 @@ namespace AndroidBackpackPaging
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
-        // Variabel untuk Animasi Scroll Halus & Mentok
-        private float currentScroll = 0f; // 0.0f = Paling Atas, 1.0f = Paling Bawah
+        private float currentScroll = 0f;
         private float targetScroll = 0f;
         private int touchStartY = -1;
         private bool isSwiping = false;
@@ -29,7 +28,7 @@ namespace AndroidBackpackPaging
             helper.Events.Input.ButtonPressed += OnButtonPressed;
             helper.Events.Input.ButtonReleased += OnButtonReleased;
 
-            // Muat gambar backpack.png asli
+            // Muat file gambar asli backpack.png
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -53,7 +52,7 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Gambar Tas Hijau di Meja Kasir Pierre & Player di Depan Tas
+            // TAMPILKAN TAS DI MEJA PIERRE & PLAYER DI DEPAN TAS
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -87,7 +86,7 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            // ANIMASI INTERPOLASI HALUS (SMOOTH LERP)
+            // ANIMASI SCROLL MELUNCUR HALUS
             if (Math.Abs(currentScroll - targetScroll) > 0.001f)
             {
                 currentScroll = MathHelper.Lerp(currentScroll, targetScroll, 0.22f);
@@ -102,11 +101,12 @@ namespace AndroidBackpackPaging
                     var invMenu = invPage.inventory;
                     SetupInventory48(gameMenu);
 
+                    int slotSize = invMenu.inventory[0].bounds.Width; // Ukuran asli layar HP (tidak mengecil)
                     int startX = invMenu.inventory[0].bounds.X;
                     int startY = invMenu.yPositionOnScreen;
-                    int pixelShift = (int)(currentScroll * 64f); // Geser halus 0 sampai 64 piksel
+                    int pixelShift = (int)(currentScroll * slotSize);
 
-                    // Reposisi koordinat 48 slot secara mulus
+                    // Reposisi koordinat 48 slot di dalam menu
                     for (int r = 0; r < 4; r++)
                     {
                         for (int c = 0; c < 12; c++)
@@ -115,26 +115,50 @@ namespace AndroidBackpackPaging
                             if (idx < invMenu.inventory.Count)
                             {
                                 invMenu.inventory[idx].bounds = new Rectangle(
-                                    startX + (c * 64),
-                                    startY + (r * 64) - pixelShift,
-                                    64,
-                                    64
+                                    startX + (c * slotSize),
+                                    startY + (r * slotSize) - pixelShift,
+                                    slotSize,
+                                    slotSize
                                 );
                             }
                         }
                     }
 
-                    // 1. GAMBAR GARIS MEMANJANG & SLIDER EMAS (SCROLLBAR)
-                    int trackX = startX + (12 * 64) + 8;
-                    int trackY = startY + 8;
-                    int trackHeight = (3 * 64) - 16;
-                    int thumbHeight = 42;
+                    // 1. GAMBAR SCROLLBAR 100% VANILLA ASLI GAME
+                    int trackX = startX + (12 * slotSize) + 10;
+                    int trackY = startY + 6;
+                    int trackWidth = 24;
+                    int trackHeight = (3 * slotSize) - 12;
+                    int thumbHeight = 44;
                     int thumbY = trackY + (int)(currentScroll * (trackHeight - thumbHeight));
 
-                    // Garis memanjang (Track)
-                    e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(trackX, trackY, 4, trackHeight), Color.Black * 0.30f);
-                    // Slider Emas (Thumb)
-                    e.SpriteBatch.Draw(Game1.staminaRect, new Rectangle(trackX - 2, thumbY, 8, thumbHeight), Color.Gold);
+                    // Jalur Scrollbar Bawaan Game (Abu-abu Vanilla)
+                    IClickableMenu.drawTextureBox(
+                        e.SpriteBatch,
+                        Game1.mouseCursors,
+                        new Rectangle(403, 383, 6, 6),
+                        trackX,
+                        trackY,
+                        trackWidth,
+                        trackHeight,
+                        Color.White,
+                        4f,
+                        false
+                    );
+
+                    // Slider Kotak Emas/Kayu Bawaan Game (Vanilla Thumb)
+                    IClickableMenu.drawTextureBox(
+                        e.SpriteBatch,
+                        Game1.mouseCursors,
+                        new Rectangle(435, 463, 6, 10),
+                        trackX,
+                        thumbY,
+                        trackWidth,
+                        thumbHeight,
+                        Color.White,
+                        4f,
+                        false
+                    );
 
                     // 2. SEBELUM BELI (36 SLOT): Berikan efek arsiran terkunci pada Baris ke-4
                     if (Game1.player.MaxItems == 36 && invMenu.inventory.Count >= 48)
@@ -172,12 +196,13 @@ namespace AndroidBackpackPaging
                         invMenu.capacity = 48;
                         invMenu.rows = 4;
 
+                        int slotSize = invMenu.inventory[0].bounds.Width;
                         int startX = invMenu.inventory[0].bounds.X;
                         int startY = invMenu.yPositionOnScreen;
 
                         for (int i = 0; i < 12; i++)
                         {
-                            Rectangle row4Bounds = new Rectangle(startX + (i * 64), startY + (3 * 64), 64, 64);
+                            Rectangle row4Bounds = new Rectangle(startX + (i * slotSize), startY + (3 * slotSize), slotSize, slotSize);
                             invMenu.inventory.Add(new ClickableComponent(row4Bounds, (36 + i).ToString()));
                         }
                     }
@@ -198,7 +223,8 @@ namespace AndroidBackpackPaging
                     if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                     {
                         var invMenu = invPage.inventory;
-                        Rectangle invArea = new Rectangle(invMenu.inventory[0].bounds.X, invMenu.yPositionOnScreen, (12 * 64) + 30, 3 * 64);
+                        int slotSize = invMenu.inventory[0].bounds.Width;
+                        Rectangle invArea = new Rectangle(invMenu.inventory[0].bounds.X, invMenu.yPositionOnScreen, (12 * slotSize) + 40, 3 * slotSize);
 
                         if (invArea.Contains(touchPos))
                         {
@@ -269,23 +295,23 @@ namespace AndroidBackpackPaging
 
         private void OnButtonReleased(object sender, ButtonReleasedEventArgs e)
         {
-            // DETEKSI GESTUR SWIPE DENGAN SISTEM MENTOK (CLAMPED)
+            // DETEKSI GESTUR SWIPE DENGAN SISTEM MENTOK
             if (e.Button == SButton.MouseLeft && isSwiping && touchStartY >= 0)
             {
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
                 {
                     int deltaY = touchStartY - Game1.getMousePosition().Y;
 
-                    // Swipe UP (Usap ke Atas minimal 25 piksel) -> Meluncur Turun ke Baris 2-4
+                    // Swipe UP (Usap ke Atas minimal 25 piksel) -> Meluncur ke Baris 2-4
                     if (deltaY > 25 && targetScroll < 1f)
                     {
-                        targetScroll = 1f; // MENTOK DI BAWAH
+                        targetScroll = 1f; // Mentok Bawah
                         Game1.playSound("shwip");
                     }
-                    // Swipe DOWN (Usap ke Bawah minimal 25 piksel) -> Meluncur Naik ke Baris 1-3
+                    // Swipe DOWN (Usap ke Bawah minimal 25 piksel) -> Meluncur ke Baris 1-3
                     else if (deltaY < -25 && targetScroll > 0f)
                     {
-                        targetScroll = 0f; // MENTOK DI ATAS
+                        targetScroll = 0f; // Mentok Atas
                         Game1.playSound("shwip");
                     }
                 }
