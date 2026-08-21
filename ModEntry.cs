@@ -14,7 +14,7 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
-        private int currentPage = 1;
+        private bool isPage2Active = false; // false = Halaman 1, true = Halaman 2
         private Rectangle pageButtonBounds;
 
         public override void Entry(IModHelper helper)
@@ -55,11 +55,7 @@ namespace AndroidBackpackPaging
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            if (currentPage == 2 && Game1.player.MaxItems == 48)
-            {
-                SwitchPage(1);
-            }
-            currentPage = 1;
+            ResetToPage1();
             Ensure48Slots();
         }
 
@@ -100,7 +96,7 @@ namespace AndroidBackpackPaging
             int btnSize = 52;
             pageButtonBounds = new Rectangle(x, y, btnSize, btnSize);
 
-            // Kotak tombol merah terang (Tema tombol X)
+            // Kotak tombol merah
             IClickableMenu.drawTextureBox(
                 b,
                 Game1.menuTexture,
@@ -114,7 +110,7 @@ namespace AndroidBackpackPaging
                 false
             );
 
-            string label = (currentPage == 1) ? "1" : "2";
+            string label = isPage2Active ? "2" : "1";
             SpriteFont font = Game1.dialogueFont;
             Vector2 textSize = font.MeasureString(label);
             Vector2 textPos = new Vector2(
@@ -135,53 +131,49 @@ namespace AndroidBackpackPaging
             }
         }
 
-        private void SwitchPage(int targetPage)
+        // SISTEM TUKAR 2 ARAH MURNI (100% AMAN DARI ITEM HILANG)
+        private void TogglePage()
         {
-            if (Game1.player.MaxItems != 48 || targetPage == currentPage) return;
+            if (Game1.player.MaxItems != 48) return;
             Ensure48Slots();
 
             Game1.playSound("shwip");
 
-            if (targetPage == 2)
+            // Tukar langsung isi Baris 3 (index 24..35) dengan Baris 4 (index 36..47)
+            for (int i = 0; i < 12; i++)
             {
-                List<Item> row1 = new List<Item>();
-                for (int i = 0; i < 12; i++)
-                    row1.Add(Game1.player.Items[i]);
-
-                for (int i = 12; i < 48; i++)
-                    Game1.player.Items[i - 12] = Game1.player.Items[i];
-
-                for (int i = 0; i < 12; i++)
-                    Game1.player.Items[36 + i] = row1[i];
-
-                currentPage = 2;
+                Item temp = Game1.player.Items[24 + i];
+                Game1.player.Items[24 + i] = Game1.player.Items[36 + i];
+                Game1.player.Items[36 + i] = temp;
             }
-            else if (targetPage == 1)
+
+            isPage2Active = !isPage2Active;
+        }
+
+        private void ResetToPage1()
+        {
+            if (isPage2Active && Game1.player.MaxItems == 48)
             {
-                List<Item> row4 = new List<Item>();
-                for (int i = 36; i < 48; i++)
-                    row4.Add(Game1.player.Items[i]);
-
-                for (int i = 35; i >= 0; i--)
-                    Game1.player.Items[i + 12] = Game1.player.Items[i];
-
+                Ensure48Slots();
                 for (int i = 0; i < 12; i++)
-                    Game1.player.Items[i] = row4[i];
-
-                currentPage = 1;
+                {
+                    Item temp = Game1.player.Items[24 + i];
+                    Game1.player.Items[24 + i] = Game1.player.Items[36 + i];
+                    Game1.player.Items[36 + i] = temp;
+                }
+                isPage2Active = false;
             }
         }
 
         private void OrganizeAll48Slots()
         {
-            if (currentPage == 2)
-            {
-                SwitchPage(1);
-            }
-
+            ResetToPage1();
             Ensure48Slots();
+
+            // Sortir resmi seluruh 48 slot
             ItemGrabMenu.organizeItemsInList(Game1.player.Items);
             Game1.playSound("Ship");
+            Game1.showGlobalMessage("Inventory Organized!");
         }
 
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
@@ -192,25 +184,25 @@ namespace AndroidBackpackPaging
             Vector2 scaledVec = Utility.ModifyCoordinatesForUIScale(new Vector2(mousePos.X, mousePos.Y));
             Point uiPos = new Point((int)scaledVec.X, (int)scaledVec.Y);
 
-            // 1. DETEKSI KLIK TOMBOL MERAH HALAMAN (DENGAN AREA BANTALAN + DUAL KOORDINAT)
+            // 1. KLIK TOMBOL MERAH HALAMAN (DUAL DETEKSI)
             if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
-                Rectangle touchArea = new Rectangle(pageButtonBounds.X - 8, pageButtonBounds.Y - 8, pageButtonBounds.Width + 16, pageButtonBounds.Height + 16);
+                Rectangle touchArea = new Rectangle(pageButtonBounds.X - 10, pageButtonBounds.Y - 10, pageButtonBounds.Width + 20, pageButtonBounds.Height + 20);
                 if (touchArea.Contains(mousePos) || touchArea.Contains(uiPos))
                 {
                     Helper.Input.Suppress(e.Button);
-                    int next = (currentPage == 1) ? 2 : 1;
-                    SwitchPage(next);
+                    TogglePage();
                     return;
                 }
             }
 
-            // 2. DETEKSI KLIK TOMBOL SORTIR DI MENU TAS
+            // 2. KLIK TOMBOL SORTIR DI MENU TAS UTAMA
             if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0)
             {
                 if (gm.GetCurrentPage() is InventoryPage invPage && invPage.organizeButton != null)
                 {
-                    if (invPage.organizeButton.containsPoint(mousePos.X, mousePos.Y) || invPage.organizeButton.containsPoint(uiPos.X, uiPos.Y))
+                    Rectangle orgArea = new Rectangle(invPage.organizeButton.bounds.X - 12, invPage.organizeButton.bounds.Y - 12, invPage.organizeButton.bounds.Width + 24, invPage.organizeButton.bounds.Height + 24);
+                    if (orgArea.Contains(mousePos) || orgArea.Contains(uiPos))
                     {
                         Helper.Input.Suppress(e.Button);
                         OrganizeAll48Slots();
@@ -219,15 +211,15 @@ namespace AndroidBackpackPaging
                 }
             }
 
-            // 3. DETEKSI KLIK TOMBOL SORTIR DI MENU PETI (CHEST)
+            // 3. KLIK TOMBOL SORTIR DI MENU PETI (CHEST)
             if (Game1.activeClickableMenu is ItemGrabMenu grabMenu && grabMenu.organizeButton != null)
             {
-                if (grabMenu.organizeButton.containsPoint(mousePos.X, mousePos.Y) || grabMenu.organizeButton.containsPoint(uiPos.X, uiPos.Y))
+                Rectangle orgArea = new Rectangle(grabMenu.organizeButton.bounds.X - 12, grabMenu.organizeButton.bounds.Y - 12, grabMenu.organizeButton.bounds.Width + 24, grabMenu.organizeButton.bounds.Height + 24);
+                if (orgArea.Contains(mousePos) || orgArea.Contains(uiPos))
                 {
-                    if (currentPage == 2)
-                    {
-                        SwitchPage(1);
-                    }
+                    Helper.Input.Suppress(e.Button);
+                    OrganizeAll48Slots();
+                    return;
                 }
             }
 
@@ -268,11 +260,3 @@ namespace AndroidBackpackPaging
                                         Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
                                     }
                                 }
-                            })
-                        );
-                    }
-                }
-            }
-        }
-    }
-}
