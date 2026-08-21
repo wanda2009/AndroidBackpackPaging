@@ -15,10 +15,15 @@ namespace AndroidBackpackPaging
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
 
+        // Variabel Scrollbar & Sentuhan
         private float currentScroll = 0f;
         private float targetScroll = 0f;
         private int touchStartY = -1;
         private bool isSwiping = false;
+        private bool isDraggingScrollbar = false;
+
+        private Rectangle trackBounds;
+        private Rectangle thumbBounds;
 
         public override void Entry(IModHelper helper)
         {
@@ -52,7 +57,7 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // TAMPILKAN TAS DI MEJA PIERRE & PLAYER DI DEPAN TAS
+            // Tampilkan tas di meja Pierre & player di depan tas
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -81,15 +86,22 @@ namespace AndroidBackpackPaging
         {
             targetScroll = 0f;
             currentScroll = 0f;
+            isDraggingScrollbar = false;
             SetupInventory48(e.NewMenu);
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
-            // ANIMASI SCROLL MELUNCUR HALUS
+            // 1. UPDATE DRAG SCROLLBAR REAL-TIME
+            if (isDraggingScrollbar && Helper.Input.IsDown(SButton.MouseLeft))
+            {
+                UpdateScrollbarDrag(Game1.getMousePosition().Y);
+            }
+
+            // 2. ANIMASI MELUNCUR HALUS
             if (Math.Abs(currentScroll - targetScroll) > 0.001f)
             {
-                currentScroll = MathHelper.Lerp(currentScroll, targetScroll, 0.22f);
+                currentScroll = MathHelper.Lerp(currentScroll, targetScroll, 0.25f);
                 if (Math.Abs(currentScroll - targetScroll) < 0.005f)
                     currentScroll = targetScroll;
             }
@@ -101,12 +113,12 @@ namespace AndroidBackpackPaging
                     var invMenu = invPage.inventory;
                     SetupInventory48(gameMenu);
 
-                    int slotSize = invMenu.inventory[0].bounds.Width; // Ukuran asli layar HP (tidak mengecil)
+                    int slotSize = invMenu.inventory[0].bounds.Width;
                     int startX = invMenu.inventory[0].bounds.X;
                     int startY = invMenu.yPositionOnScreen;
                     int pixelShift = (int)(currentScroll * slotSize);
 
-                    // Reposisi koordinat 48 slot di dalam menu
+                    // Geser koordinat 48 slot secara halus
                     for (int r = 0; r < 4; r++)
                     {
                         for (int c = 0; c < 12; c++)
@@ -124,15 +136,18 @@ namespace AndroidBackpackPaging
                         }
                     }
 
-                    // 1. GAMBAR SCROLLBAR 100% VANILLA ASLI GAME
-                    int trackX = startX + (12 * slotSize) + 10;
-                    int trackY = startY + 6;
-                    int trackWidth = 24;
-                    int trackHeight = (3 * slotSize) - 12;
+                    // 3. GAMBAR SCROLLBAR ASLI VANILLA (DIPANJANGKAN & RAMPING PERSIS MENU CRAFTING)
+                    int trackX = startX + (12 * slotSize) + 12;
+                    int trackY = startY + 2;
+                    int trackWidth = 16;
+                    int trackHeight = (3 * slotSize) + 4; // Dipanjangkan pas menjangkau seluruh tas
                     int thumbHeight = 44;
                     int thumbY = trackY + (int)(currentScroll * (trackHeight - thumbHeight));
 
-                    // Jalur Scrollbar Bawaan Game (Abu-abu Vanilla)
+                    trackBounds = new Rectangle(trackX - 6, trackY, trackWidth + 12, trackHeight);
+                    thumbBounds = new Rectangle(trackX, thumbY, trackWidth, thumbHeight);
+
+                    // Gambar Jalur Abu-abu Resmi Game (Track)
                     IClickableMenu.drawTextureBox(
                         e.SpriteBatch,
                         Game1.mouseCursors,
@@ -146,7 +161,7 @@ namespace AndroidBackpackPaging
                         false
                     );
 
-                    // Slider Kotak Emas/Kayu Bawaan Game (Vanilla Thumb)
+                    // Gambar Balok Slider Kayu/Emas Resmi Game (Thumb)
                     IClickableMenu.drawTextureBox(
                         e.SpriteBatch,
                         Game1.mouseCursors,
@@ -160,27 +175,46 @@ namespace AndroidBackpackPaging
                         false
                     );
 
-                    // 2. SEBELUM BELI (36 SLOT): Berikan efek arsiran terkunci pada Baris ke-4
-                    if (Game1.player.MaxItems == 36 && invMenu.inventory.Count >= 48)
-                    {
-                        for (int i = 36; i < 48; i++)
-                        {
-                            var slot = invMenu.inventory[i];
-                            IClickableMenu.drawTextureBox(
-                                e.SpriteBatch,
-                                Game1.menuTexture,
-                                new Rectangle(0, 256, 60, 60),
-                                slot.bounds.X,
-                                slot.bounds.Y,
-                                slot.bounds.Width,
-                                slot.bounds.Height,
-                                Color.DimGray * 0.40f,
-                                1f,
-                                false
-                            );
-                        }
-                    }
+                    // 4. TRIK PENUTUP BAWAH: Gambar penutup krem & garis cokelat agar item menyelam ke belakang profil
+                    int dividerY = startY + (3 * slotSize) + 4;
+                    int bottomHeight = (gameMenu.yPositionOnScreen + gameMenu.height) - dividerY;
+
+                    // Tutup area bawah dengan kotak krem resmi
+                    IClickableMenu.drawTextureBox(
+                        e.SpriteBatch,
+                        Game1.menuTexture,
+                        new Rectangle(0, 256, 60, 60),
+                        gameMenu.xPositionOnScreen + 16,
+                        dividerY,
+                        gameMenu.width - 32,
+                        bottomHeight,
+                        new Color(245, 207, 148),
+                        1f,
+                        false
+                    );
+
+                    // Gambar ulang Garis Pembatas Cokelat tebal di depan
+                    e.SpriteBatch.Draw(
+                        Game1.staminaRect,
+                        new Rectangle(gameMenu.xPositionOnScreen + 16, dividerY, gameMenu.width - 32, 6),
+                        new Color(185, 95, 25)
+                    );
+
+                    // Gambar ulang seluruh panel profil (Foto, Nama, Uang) di lapisan paling depan
+                    invPage.draw(e.SpriteBatch);
                 }
+            }
+        }
+
+        private void UpdateScrollbarDrag(int touchY)
+        {
+            int thumbHeight = 44;
+            int maxTravel = trackBounds.Height - thumbHeight;
+            if (maxTravel > 0)
+            {
+                float progress = (float)(touchY - trackBounds.Y - (thumbHeight / 2)) / maxTravel;
+                targetScroll = MathHelper.Clamp(progress, 0f, 1f);
+                currentScroll = targetScroll;
             }
         }
 
@@ -216,34 +250,30 @@ namespace AndroidBackpackPaging
 
             if (e.Button == SButton.MouseLeft)
             {
-                // Deteksi sentuhan di menu tas untuk Swipe & Kunci Anti-Ngezoom
                 if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
                 {
                     Point touchPos = Game1.getMousePosition();
+
+                    // 1. Sentuh / Tarik Langsung Slider Scrollbar
+                    if (trackBounds.Contains(touchPos) || thumbBounds.Contains(touchPos))
+                    {
+                        Helper.Input.Suppress(e.Button);
+                        isDraggingScrollbar = true;
+                        UpdateScrollbarDrag(touchPos.Y);
+                        return;
+                    }
+
+                    // 2. Sentuh Area Tas untuk Gestur Swipe
                     if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                     {
                         var invMenu = invPage.inventory;
                         int slotSize = invMenu.inventory[0].bounds.Width;
-                        Rectangle invArea = new Rectangle(invMenu.inventory[0].bounds.X, invMenu.yPositionOnScreen, (12 * slotSize) + 40, 3 * slotSize);
+                        Rectangle invArea = new Rectangle(invMenu.inventory[0].bounds.X, invMenu.yPositionOnScreen, (12 * slotSize), 3 * slotSize);
 
                         if (invArea.Contains(touchPos))
                         {
                             touchStartY = touchPos.Y;
                             isSwiping = true;
-
-                            // Kunci sentuhan pada baris ke-4 jika belum dibeli
-                            if (Game1.player.MaxItems == 36)
-                            {
-                                for (int i = 36; i < invMenu.inventory.Count; i++)
-                                {
-                                    if (invMenu.inventory[i].bounds.Contains(touchPos))
-                                    {
-                                        Helper.Input.Suppress(e.Button);
-                                        Game1.playSound("cancel");
-                                        return;
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -295,29 +325,32 @@ namespace AndroidBackpackPaging
 
         private void OnButtonReleased(object sender, ButtonReleasedEventArgs e)
         {
-            // DETEKSI GESTUR SWIPE DENGAN SISTEM MENTOK
-            if (e.Button == SButton.MouseLeft && isSwiping && touchStartY >= 0)
+            if (e.Button == SButton.MouseLeft)
             {
-                if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
+                isDraggingScrollbar = false;
+
+                // Gestur Swipe dengan batas mentok
+                if (isSwiping && touchStartY >= 0)
                 {
-                    int deltaY = touchStartY - Game1.getMousePosition().Y;
+                    if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
+                    {
+                        int deltaY = touchStartY - Game1.getMousePosition().Y;
 
-                    // Swipe UP (Usap ke Atas minimal 25 piksel) -> Meluncur ke Baris 2-4
-                    if (deltaY > 25 && targetScroll < 1f)
-                    {
-                        targetScroll = 1f; // Mentok Bawah
-                        Game1.playSound("shwip");
+                        if (deltaY > 25 && targetScroll < 1f)
+                        {
+                            targetScroll = 1f; // Mentok Bawah
+                            Game1.playSound("shwip");
+                        }
+                        else if (deltaY < -25 && targetScroll > 0f)
+                        {
+                            targetScroll = 0f; // Mentok Atas
+                            Game1.playSound("shwip");
+                        }
                     }
-                    // Swipe DOWN (Usap ke Bawah minimal 25 piksel) -> Meluncur ke Baris 1-3
-                    else if (deltaY < -25 && targetScroll > 0f)
-                    {
-                        targetScroll = 0f; // Mentok Atas
-                        Game1.playSound("shwip");
-                    }
+
+                    isSwiping = false;
+                    touchStartY = -1;
                 }
-
-                isSwiping = false;
-                touchStartY = -1;
             }
         }
     }
