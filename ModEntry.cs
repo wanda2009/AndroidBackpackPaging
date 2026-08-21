@@ -16,6 +16,12 @@ namespace AndroidBackpackPaging
         private const int UPGRADE_PRICE = 50000;
         private const int THUMB_HEIGHT = 44;
 
+        // Koordinat Asli yang Terkunci Permanen (Anti-Lenyap)
+        private int cachedStartX = 0;
+        private int cachedStartY = 0;
+        private int cachedSlotSize = 64;
+        private bool isCoordsInitialized = false;
+
         // Kontrol Scroll & Touch Real-Time
         private float currentScroll = 0f;
         private float targetScroll = 0f;
@@ -90,6 +96,20 @@ namespace AndroidBackpackPaging
             isTouchHeld = false;
             isDraggingScrollbar = false;
             isDraggingInventory = false;
+            isCoordsInitialized = false;
+
+            if (e.NewMenu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
+            {
+                var inv = invPage.inventory;
+                if (inv.inventory.Count >= 12)
+                {
+                    cachedSlotSize = inv.inventory[0].bounds.Width > 0 ? inv.inventory[0].bounds.Width : 64;
+                    cachedStartX = inv.inventory[0].bounds.X;
+                    cachedStartY = inv.yPositionOnScreen;
+                    isCoordsInitialized = true;
+                }
+            }
+
             SetupInventory48(e.NewMenu);
         }
 
@@ -102,11 +122,20 @@ namespace AndroidBackpackPaging
                     var invMenu = invPage.inventory;
                     SetupInventory48(gameMenu);
 
-                    int slotSize = invMenu.inventory[0].bounds.Width;
-                    int startX = invMenu.xPositionOnScreen;
-                    int startY = invMenu.yPositionOnScreen;
+                    // Pastikan koordinat awal terkunci dan tidak pernah berubah jadi 0
+                    if (!isCoordsInitialized && invMenu.inventory.Count >= 12)
+                    {
+                        cachedSlotSize = invMenu.inventory[0].bounds.Width > 0 ? invMenu.inventory[0].bounds.Width : 64;
+                        cachedStartX = invMenu.inventory[0].bounds.X;
+                        cachedStartY = invMenu.yPositionOnScreen;
+                        isCoordsInitialized = true;
+                    }
 
-                    // 1. UPDATE DRAG SECARA REAL-TIME 60 FPS (BEBAS TAP-TAP)
+                    int slotSize = cachedSlotSize;
+                    int startX = cachedStartX;
+                    int startY = cachedStartY;
+
+                    // 1. UPDATE DRAG SECARA REAL-TIME 60 FPS
                     if (isTouchHeld)
                     {
                         int currentTouchY = Game1.getMousePosition().Y;
@@ -119,7 +148,7 @@ namespace AndroidBackpackPaging
                         {
                             float deltaProgress = (float)(touchStartY - currentTouchY) / slotSize;
                             targetScroll = MathHelper.Clamp(dragStartScroll + deltaProgress, 0f, 1f);
-                            currentScroll = targetScroll; // Gerak instan mengikuti jari
+                            currentScroll = targetScroll;
                         }
                     }
 
@@ -132,10 +161,8 @@ namespace AndroidBackpackPaging
                     }
 
                     int pixelShift = (int)(currentScroll * slotSize);
-                    int safeTop = startY;
-                    int safeBottom = startY + (3 * slotSize);
 
-                    // 3. ATUR KOORDINAT 48 SLOT & HILANGKAN SLOT YANG KELUAR BATAS (ANTI-TEMBUS)
+                    // 3. GESER KOORDINAT 48 SLOT MENGGUNAKAN KOORDINAT TERKUNCI (ANTI-HILANG)
                     for (int r = 0; r < 4; r++)
                     {
                         int rowY = startY + (r * slotSize) - pixelShift;
@@ -145,24 +172,17 @@ namespace AndroidBackpackPaging
                             int idx = r * 12 + c;
                             if (idx < invMenu.inventory.Count)
                             {
-                                if (rowY >= safeTop && (rowY + slotSize) <= safeBottom)
-                                {
-                                    invMenu.inventory[idx].bounds = new Rectangle(
-                                        startX + (c * slotSize),
-                                        rowY,
-                                        slotSize,
-                                        slotSize
-                                    );
-                                }
-                                else
-                                {
-                                    invMenu.inventory[idx].bounds = new Rectangle(-1000, -1000, 0, 0);
-                                }
+                                invMenu.inventory[idx].bounds = new Rectangle(
+                                    startX + (c * slotSize),
+                                    rowY,
+                                    slotSize,
+                                    slotSize
+                                );
                             }
                         }
                     }
 
-                    // 4. GAMBAR SCROLLBAR ASLI VANILLA (LEBAR 20px PERSIS MENU CRAFTING)
+                    // 4. GAMBAR SCROLLBAR ASLI VANILLA (LEBAR 20px)
                     int trackX = startX + (12 * slotSize) + 8;
                     int trackY = startY + 2;
                     int trackWidth = 20;
@@ -210,7 +230,7 @@ namespace AndroidBackpackPaging
             {
                 float progress = (float)(touchY - trackBounds.Y - (THUMB_HEIGHT / 2)) / maxTravel;
                 targetScroll = MathHelper.Clamp(progress, 0f, 1f);
-                currentScroll = targetScroll; // Mengikuti jari secara instan saat diseret
+                currentScroll = targetScroll;
             }
         }
 
@@ -233,9 +253,9 @@ namespace AndroidBackpackPaging
                         invMenu.capacity = 48;
                         invMenu.rows = 4;
 
-                        int slotSize = 64;
-                        int startX = invMenu.xPositionOnScreen;
-                        int startY = invMenu.yPositionOnScreen;
+                        int slotSize = cachedSlotSize;
+                        int startX = cachedStartX > 0 ? cachedStartX : invMenu.xPositionOnScreen;
+                        int startY = cachedStartY > 0 ? cachedStartY : invMenu.yPositionOnScreen;
 
                         for (int i = 0; i < 12; i++)
                         {
@@ -257,13 +277,13 @@ namespace AndroidBackpackPaging
                 {
                     Point touchPos = Game1.getMousePosition();
 
-                    // Proteksi Tab Atas: Jangan interupsi sentuhan pada tab
+                    // Proteksi Tab Atas
                     if (touchPos.Y < gameMenu.yPositionOnScreen)
                     {
                         return;
                     }
 
-                    // 1. Sentuh Langsung Slider / Track Scrollbar
+                    // 1. Sentuh Langsung Slider Scrollbar
                     if (trackBounds.Contains(touchPos) || thumbBounds.Contains(touchPos))
                     {
                         Helper.Input.Suppress(e.Button);
@@ -276,9 +296,10 @@ namespace AndroidBackpackPaging
                     // 2. Sentuh Area Tas untuk Drag / Swipe
                     if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                     {
-                        var invMenu = invPage.inventory;
-                        int slotSize = invMenu.inventory[0].bounds.Width;
-                        Rectangle invArea = new Rectangle(invMenu.xPositionOnScreen, invMenu.yPositionOnScreen, 12 * slotSize, 3 * slotSize);
+                        int slotSize = cachedSlotSize;
+                        int startX = cachedStartX > 0 ? cachedStartX : invPage.inventory.xPositionOnScreen;
+                        int startY = cachedStartY > 0 ? cachedStartY : invPage.inventory.yPositionOnScreen;
+                        Rectangle invArea = new Rectangle(startX, startY, 12 * slotSize, 3 * slotSize);
 
                         if (invArea.Contains(touchPos))
                         {
@@ -342,7 +363,6 @@ namespace AndroidBackpackPaging
                 isTouchHeld = false;
                 isDraggingScrollbar = false;
 
-                // Kunci posisi akhir saat jari dilepas (Snap mentok atas atau mentok bawah secara mulus)
                 if (isDraggingInventory || !isDraggingScrollbar)
                 {
                     targetScroll = (currentScroll > 0.5f) ? 1f : 0f;
