@@ -14,7 +14,7 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
-        private int currentPage = 1; // 1 = Slot 1-36, 2 = Slot 13-48
+        private int currentPage = 1; // 1 = Halaman 1, 2 = Halaman 2
         private Rectangle pageButtonBounds;
 
         public override void Entry(IModHelper helper)
@@ -24,7 +24,6 @@ namespace AndroidBackpackPaging
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
 
-            // Muat gambar backpack.png asli
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -48,7 +47,6 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
-            // Tampilkan tas di meja Pierre & player di depan tas
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -75,7 +73,6 @@ namespace AndroidBackpackPaging
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            // Reset ke Halaman 1 saat membuka/menutup menu
             if (currentPage == 2 && Game1.player.MaxItems == 48)
             {
                 SwitchPage(1);
@@ -89,7 +86,7 @@ namespace AndroidBackpackPaging
             if (Game1.player.MaxItems != 48) return;
             Ensure48Slots();
 
-            // 1. TAMPILKAN TOMBOL DI MENU TAS UTAMA (GameMenu)
+            // 1. Menu Tas Utama (GameMenu)
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
@@ -97,20 +94,20 @@ namespace AndroidBackpackPaging
                     var inv = invPage.inventory;
                     if (inv.inventory.Count >= 12)
                     {
-                        int btnX = inv.inventory[11].bounds.Right + 12;
-                        int btnY = inv.inventory[0].bounds.Y + 6;
+                        int btnX = inv.inventory[11].bounds.Right + 10;
+                        int btnY = inv.inventory[0].bounds.Y + 2;
                         DrawPageButton(e.SpriteBatch, btnX, btnY);
                     }
                 }
             }
-            // 2. TAMPILKAN TOMBOL DI MENU PETI / CHEST / KULKAS (ItemGrabMenu)
+            // 2. Menu Peti / Chest / Kulkas (ItemGrabMenu)
             else if (Game1.activeClickableMenu is ItemGrabMenu grabMenu && grabMenu.inventory != null)
             {
                 var inv = grabMenu.inventory;
                 if (inv.inventory.Count >= 12)
                 {
-                    int btnX = inv.inventory[11].bounds.Right + 12;
-                    int btnY = inv.inventory[0].bounds.Y + 6;
+                    int btnX = inv.inventory[11].bounds.Right + 10;
+                    int btnY = inv.inventory[0].bounds.Y + 2;
                     DrawPageButton(e.SpriteBatch, btnX, btnY);
                 }
             }
@@ -118,11 +115,11 @@ namespace AndroidBackpackPaging
 
         private void DrawPageButton(SpriteBatch b, int x, int y)
         {
-            int btnWidth = 54;
-            int btnHeight = 54;
+            int btnWidth = 62;  // Ukuran diperbesar (dari 54 ke 62)
+            int btnHeight = 62;
             pageButtonBounds = new Rectangle(x, y, btnWidth, btnHeight);
 
-            // Gambar kotak tombol kayu resmi Stardew Valley
+            // Kotak tombol merah seperti tombol X
             IClickableMenu.drawTextureBox(
                 b,
                 Game1.menuTexture,
@@ -131,20 +128,24 @@ namespace AndroidBackpackPaging
                 pageButtonBounds.Y,
                 pageButtonBounds.Width,
                 pageButtonBounds.Height,
-                Color.White,
+                new Color(235, 60, 50), // Warna Merah Terang (Tema Tombol X)
                 1f,
                 false
             );
 
-            // Gambar Teks Halaman [1/2] atau [2/2] Emas
-            string label = (currentPage == 1) ? "1/2" : "2/2";
-            Vector2 textSize = Game1.smallFont.MeasureString(label);
+            // Teks satu angka besar ("1" atau "2")
+            string label = (currentPage == 1) ? "1" : "2";
+            SpriteFont font = Game1.dialogueFont;
+            Vector2 textSize = font.MeasureString(label);
             Vector2 textPos = new Vector2(
                 pageButtonBounds.X + (btnWidth - textSize.X) / 2,
-                pageButtonBounds.Y + (btnHeight - textSize.Y) / 2
+                pageButtonBounds.Y + (btnHeight - textSize.Y) / 2 - 2
             );
 
-            b.DrawString(Game1.smallFont, label, textPos, Color.Gold);
+            // Gambar bayangan hitam pekat
+            b.DrawString(font, label, new Vector2(textPos.X + 2, textPos.Y + 2), Color.Black);
+            // Gambar angka putih terang (sangat kontras di atas kotak merah)
+            b.DrawString(font, label, textPos, Color.White);
         }
 
         private void Ensure48Slots()
@@ -163,7 +164,7 @@ namespace AndroidBackpackPaging
 
             Game1.playSound("shwip");
 
-            if (targetPage == 2) // Pindah ke Halaman 2 (Baris 2-4 / Slot 13-48)
+            if (targetPage == 2)
             {
                 List<Item> row1 = new List<Item>();
                 for (int i = 0; i < 12; i++)
@@ -177,7 +178,7 @@ namespace AndroidBackpackPaging
 
                 currentPage = 2;
             }
-            else if (targetPage == 1) // Kembali ke Halaman 1 (Baris 1-3 / Slot 1-36)
+            else if (targetPage == 1)
             {
                 List<Item> row4 = new List<Item>();
                 for (int i = 36; i < 48; i++)
@@ -199,7 +200,7 @@ namespace AndroidBackpackPaging
 
             Point touchPos = Game1.getMousePosition();
 
-            // 1. Deteksi Klik Tombol Halaman [1/2] / [2/2] di Menu Tas ATAU Menu Peti (Chest)
+            // Klik Tombol Merah Halaman di Menu Tas ATAU Menu Peti (Chest)
             if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
                 if (pageButtonBounds.Contains(touchPos))
@@ -211,7 +212,7 @@ namespace AndroidBackpackPaging
                 }
             }
 
-            // 2. Interaksi Beli Tas 48 Slot di Meja Pierre
+            // Beli Tas 48 Slot di Meja Pierre
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
                 Vector2 clickedTile = e.Cursor.Tile;
@@ -219,37 +220,38 @@ namespace AndroidBackpackPaging
                 if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
                 {
                     if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
-                    {
-                        Helper.Input.Suppress(e.Button);
-
-                        var responses = new Response[]
                         {
-                            new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
-                            new Response("NotNow", "Not now")
-                        };
+                            Helper.Input.Suppress(e.Button);
 
-                        Game1.currentLocation.createQuestionDialogue(
-                            "Backpack Upgrade -- 48 slots",
-                            responses,
-                            new GameLocation.afterQuestionBehavior((farmer, answer) =>
+                            var responses = new Response[]
                             {
-                                if (answer == "Purchase")
-                                {
-                                    if (farmer.Money >= UPGRADE_PRICE)
-                                    {
-                                        farmer.Money -= UPGRADE_PRICE;
-                                        farmer.MaxItems = 48; // Buka 48 slot
+                                new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
+                                new Response("NotNow", "Not now")
+                            };
 
-                                        Game1.playSound("reward");
-                                        Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
-                                    }
-                                    else
+                            Game1.currentLocation.createQuestionDialogue(
+                                "Backpack Upgrade -- 48 slots",
+                                responses,
+                                new GameLocation.afterQuestionBehavior((farmer, answer) =>
+                                {
+                                    if (answer == "Purchase")
                                     {
-                                        Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
+                                        if (farmer.Money >= UPGRADE_PRICE)
+                                        {
+                                            farmer.Money -= UPGRADE_PRICE;
+                                            farmer.MaxItems = 48; // Buka 48 slot
+
+                                            Game1.playSound("reward");
+                                            Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
+                                        }
+                                        else
+                                        {
+                                            Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
+                                        }
                                     }
-                                }
-                            })
-                        );
+                                })
+                            );
+                        }
                     }
                 }
             }
