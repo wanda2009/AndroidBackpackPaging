@@ -14,25 +14,8 @@ namespace AndroidBackpackPaging
     {
         private Texture2D backpackTexture;
         private const int UPGRADE_PRICE = 50000;
-        private const int THUMB_HEIGHT = 44;
-
-        // Koordinat Asli yang Terkunci Permanen (Anti-Lenyap)
-        private int cachedStartX = 0;
-        private int cachedStartY = 0;
-        private int cachedSlotSize = 64;
-        private bool isCoordsInitialized = false;
-
-        // Kontrol Scroll & Touch Real-Time
-        private float currentScroll = 0f;
-        private float targetScroll = 0f;
-        private float dragStartScroll = 0f;
-        private int touchStartY = -1;
-        private bool isTouchHeld = false;
-        private bool isDraggingScrollbar = false;
-        private bool isDraggingInventory = false;
-
-        private Rectangle trackBounds;
-        private Rectangle thumbBounds;
+        private int currentPage = 1; // 1 = Slot 1-36, 2 = Slot 13-48
+        private Rectangle pageButtonBounds;
 
         public override void Entry(IModHelper helper)
         {
@@ -40,8 +23,8 @@ namespace AndroidBackpackPaging
             helper.Events.Display.MenuChanged += OnMenuChanged;
             helper.Events.Display.RenderedActiveMenu += OnRenderedActiveMenu;
             helper.Events.Input.ButtonPressed += OnButtonPressed;
-            helper.Events.Input.ButtonReleased += OnButtonReleased;
 
+            // Muat gambar backpack.png asli
             try
             {
                 string imagePath = Path.Combine(helper.DirectoryPath, "backpack.png");
@@ -65,6 +48,7 @@ namespace AndroidBackpackPaging
 
         private void OnRenderedWorld(object sender, RenderedWorldEventArgs e)
         {
+            // Tampilkan tas di meja Pierre & player di depan tas
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36 && backpackTexture != null)
             {
                 Vector2 worldPos = new Vector2(7 * 64 + 14, 18 * 64 - 56);
@@ -91,283 +75,182 @@ namespace AndroidBackpackPaging
 
         private void OnMenuChanged(object sender, MenuChangedEventArgs e)
         {
-            targetScroll = 0f;
-            currentScroll = 0f;
-            isTouchHeld = false;
-            isDraggingScrollbar = false;
-            isDraggingInventory = false;
-            isCoordsInitialized = false;
-
-            if (e.NewMenu is GameMenu gm && gm.currentTab == 0 && gm.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
+            // Reset ke Halaman 1 saat membuka/menutup menu
+            if (currentPage == 2 && Game1.player.MaxItems == 48)
             {
-                var inv = invPage.inventory;
-                if (inv.inventory.Count >= 12)
-                {
-                    cachedSlotSize = inv.inventory[0].bounds.Width > 0 ? inv.inventory[0].bounds.Width : 64;
-                    cachedStartX = inv.inventory[0].bounds.X;
-                    cachedStartY = inv.yPositionOnScreen;
-                    isCoordsInitialized = true;
-                }
+                SwitchPage(1);
             }
-
-            SetupInventory48(e.NewMenu);
+            currentPage = 1;
+            Ensure48Slots();
         }
 
         private void OnRenderedActiveMenu(object sender, RenderedActiveMenuEventArgs e)
         {
+            if (Game1.player.MaxItems != 48) return;
+            Ensure48Slots();
+
+            // 1. TAMPILKAN TOMBOL DI MENU TAS UTAMA (GameMenu)
             if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
             {
                 if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
                 {
-                    var invMenu = invPage.inventory;
-                    SetupInventory48(gameMenu);
-
-                    // Pastikan koordinat awal terkunci dan tidak pernah berubah jadi 0
-                    if (!isCoordsInitialized && invMenu.inventory.Count >= 12)
+                    var inv = invPage.inventory;
+                    if (inv.inventory.Count >= 12)
                     {
-                        cachedSlotSize = invMenu.inventory[0].bounds.Width > 0 ? invMenu.inventory[0].bounds.Width : 64;
-                        cachedStartX = invMenu.inventory[0].bounds.X;
-                        cachedStartY = invMenu.yPositionOnScreen;
-                        isCoordsInitialized = true;
+                        int btnX = inv.inventory[11].bounds.Right + 12;
+                        int btnY = inv.inventory[0].bounds.Y + 6;
+                        DrawPageButton(e.SpriteBatch, btnX, btnY);
                     }
-
-                    int slotSize = cachedSlotSize;
-                    int startX = cachedStartX;
-                    int startY = cachedStartY;
-
-                    // 1. UPDATE DRAG SECARA REAL-TIME 60 FPS
-                    if (isTouchHeld)
-                    {
-                        int currentTouchY = Game1.getMousePosition().Y;
-
-                        if (isDraggingScrollbar)
-                        {
-                            UpdateScrollbarDirect(currentTouchY);
-                        }
-                        else if (isDraggingInventory && touchStartY >= 0)
-                        {
-                            float deltaProgress = (float)(touchStartY - currentTouchY) / slotSize;
-                            targetScroll = MathHelper.Clamp(dragStartScroll + deltaProgress, 0f, 1f);
-                            currentScroll = targetScroll;
-                        }
-                    }
-
-                    // 2. ANIMASI MELUNCUR HALUS
-                    if (!isTouchHeld)
-                    {
-                        currentScroll = MathHelper.Lerp(currentScroll, targetScroll, 0.28f);
-                        if (Math.Abs(currentScroll - targetScroll) < 0.002f)
-                            currentScroll = targetScroll;
-                    }
-
-                    int pixelShift = (int)(currentScroll * slotSize);
-
-                    // 3. GESER KOORDINAT 48 SLOT MENGGUNAKAN KOORDINAT TERKUNCI (ANTI-HILANG)
-                    for (int r = 0; r < 4; r++)
-                    {
-                        int rowY = startY + (r * slotSize) - pixelShift;
-
-                        for (int c = 0; c < 12; c++)
-                        {
-                            int idx = r * 12 + c;
-                            if (idx < invMenu.inventory.Count)
-                            {
-                                invMenu.inventory[idx].bounds = new Rectangle(
-                                    startX + (c * slotSize),
-                                    rowY,
-                                    slotSize,
-                                    slotSize
-                                );
-                            }
-                        }
-                    }
-
-                    // 4. GAMBAR SCROLLBAR ASLI VANILLA (LEBAR 20px)
-                    int trackX = startX + (12 * slotSize) + 8;
-                    int trackY = startY + 2;
-                    int trackWidth = 20;
-                    int trackHeight = (3 * slotSize) - 4;
-                    int thumbY = trackY + (int)(currentScroll * (trackHeight - THUMB_HEIGHT));
-
-                    trackBounds = new Rectangle(trackX - 10, trackY, trackWidth + 20, trackHeight);
-                    thumbBounds = new Rectangle(trackX - 6, thumbY, trackWidth + 12, THUMB_HEIGHT);
-
-                    // Jalur Abu-abu Resmi
-                    IClickableMenu.drawTextureBox(
-                        e.SpriteBatch,
-                        Game1.mouseCursors,
-                        new Rectangle(403, 383, 6, 6),
-                        trackX,
-                        trackY,
-                        trackWidth,
-                        trackHeight,
-                        Color.White,
-                        4f,
-                        false
-                    );
-
-                    // Balok Slider Kayu/Emas Resmi
-                    IClickableMenu.drawTextureBox(
-                        e.SpriteBatch,
-                        Game1.mouseCursors,
-                        new Rectangle(435, 463, 6, 10),
-                        trackX,
-                        thumbY,
-                        trackWidth,
-                        THUMB_HEIGHT,
-                        Color.White,
-                        4f,
-                        false
-                    );
                 }
             }
-        }
-
-        private void UpdateScrollbarDirect(int touchY)
-        {
-            int maxTravel = trackBounds.Height - THUMB_HEIGHT;
-            if (maxTravel > 0)
+            // 2. TAMPILKAN TOMBOL DI MENU PETI / CHEST / KULKAS (ItemGrabMenu)
+            else if (Game1.activeClickableMenu is ItemGrabMenu grabMenu && grabMenu.inventory != null)
             {
-                float progress = (float)(touchY - trackBounds.Y - (THUMB_HEIGHT / 2)) / maxTravel;
-                targetScroll = MathHelper.Clamp(progress, 0f, 1f);
-                currentScroll = targetScroll;
-            }
-        }
-
-        private void SetupInventory48(IClickableMenu menu)
-        {
-            if (menu is GameMenu gameMenu && gameMenu.currentTab == 0)
-            {
-                if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
+                var inv = grabMenu.inventory;
+                if (inv.inventory.Count >= 12)
                 {
-                    var invMenu = invPage.inventory;
-
-                    if (Game1.player.MaxItems == 48)
-                    {
-                        while (Game1.player.Items.Count < 48)
-                            Game1.player.Items.Add(null);
-                    }
-
-                    if (invMenu.inventory.Count == 36)
-                    {
-                        invMenu.capacity = 48;
-                        invMenu.rows = 4;
-
-                        int slotSize = cachedSlotSize;
-                        int startX = cachedStartX > 0 ? cachedStartX : invMenu.xPositionOnScreen;
-                        int startY = cachedStartY > 0 ? cachedStartY : invMenu.yPositionOnScreen;
-
-                        for (int i = 0; i < 12; i++)
-                        {
-                            Rectangle row4Bounds = new Rectangle(startX + (i * slotSize), startY + (3 * slotSize), slotSize, slotSize);
-                            invMenu.inventory.Add(new ClickableComponent(row4Bounds, (36 + i).ToString()));
-                        }
-                    }
+                    int btnX = inv.inventory[11].bounds.Right + 12;
+                    int btnY = inv.inventory[0].bounds.Y + 6;
+                    DrawPageButton(e.SpriteBatch, btnX, btnY);
                 }
+            }
+        }
+
+        private void DrawPageButton(SpriteBatch b, int x, int y)
+        {
+            int btnWidth = 54;
+            int btnHeight = 54;
+            pageButtonBounds = new Rectangle(x, y, btnWidth, btnHeight);
+
+            // Gambar kotak tombol kayu resmi Stardew Valley
+            IClickableMenu.drawTextureBox(
+                b,
+                Game1.menuTexture,
+                new Rectangle(0, 256, 60, 60),
+                pageButtonBounds.X,
+                pageButtonBounds.Y,
+                pageButtonBounds.Width,
+                pageButtonBounds.Height,
+                Color.White,
+                1f,
+                false
+            );
+
+            // Gambar Teks Halaman [1/2] atau [2/2] Emas
+            string label = (currentPage == 1) ? "1/2" : "2/2";
+            Vector2 textSize = Game1.smallFont.MeasureString(label);
+            Vector2 textPos = new Vector2(
+                pageButtonBounds.X + (btnWidth - textSize.X) / 2,
+                pageButtonBounds.Y + (btnHeight - textSize.Y) / 2
+            );
+
+            b.DrawString(Game1.smallFont, label, textPos, Color.Gold);
+        }
+
+        private void Ensure48Slots()
+        {
+            if (Game1.player.MaxItems == 48)
+            {
+                while (Game1.player.Items.Count < 48)
+                    Game1.player.Items.Add(null);
+            }
+        }
+
+        private void SwitchPage(int targetPage)
+        {
+            if (Game1.player.MaxItems != 48 || targetPage == currentPage) return;
+            Ensure48Slots();
+
+            Game1.playSound("shwip");
+
+            if (targetPage == 2) // Pindah ke Halaman 2 (Baris 2-4 / Slot 13-48)
+            {
+                List<Item> row1 = new List<Item>();
+                for (int i = 0; i < 12; i++)
+                    row1.Add(Game1.player.Items[i]);
+
+                for (int i = 12; i < 48; i++)
+                    Game1.player.Items[i - 12] = Game1.player.Items[i];
+
+                for (int i = 0; i < 12; i++)
+                    Game1.player.Items[36 + i] = row1[i];
+
+                currentPage = 2;
+            }
+            else if (targetPage == 1) // Kembali ke Halaman 1 (Baris 1-3 / Slot 1-36)
+            {
+                List<Item> row4 = new List<Item>();
+                for (int i = 36; i < 48; i++)
+                    row4.Add(Game1.player.Items[i]);
+
+                for (int i = 35; i >= 0; i--)
+                    Game1.player.Items[i + 12] = Game1.player.Items[i];
+
+                for (int i = 0; i < 12; i++)
+                    Game1.player.Items[i] = row4[i];
+
+                currentPage = 1;
             }
         }
 
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
         {
-            if (!Context.IsWorldReady) return;
+            if (!Context.IsWorldReady || e.Button != SButton.MouseLeft) return;
 
-            if (e.Button == SButton.MouseLeft)
+            Point touchPos = Game1.getMousePosition();
+
+            // 1. Deteksi Klik Tombol Halaman [1/2] / [2/2] di Menu Tas ATAU Menu Peti (Chest)
+            if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
-                if (Game1.activeClickableMenu is GameMenu gameMenu && gameMenu.currentTab == 0)
+                if (pageButtonBounds.Contains(touchPos))
                 {
-                    Point touchPos = Game1.getMousePosition();
-
-                    // Proteksi Tab Atas
-                    if (touchPos.Y < gameMenu.yPositionOnScreen)
-                    {
-                        return;
-                    }
-
-                    // 1. Sentuh Langsung Slider Scrollbar
-                    if (trackBounds.Contains(touchPos) || thumbBounds.Contains(touchPos))
-                    {
-                        Helper.Input.Suppress(e.Button);
-                        isTouchHeld = true;
-                        isDraggingScrollbar = true;
-                        UpdateScrollbarDirect(touchPos.Y);
-                        return;
-                    }
-
-                    // 2. Sentuh Area Tas untuk Drag / Swipe
-                    if (gameMenu.GetCurrentPage() is InventoryPage invPage && invPage.inventory != null)
-                    {
-                        int slotSize = cachedSlotSize;
-                        int startX = cachedStartX > 0 ? cachedStartX : invPage.inventory.xPositionOnScreen;
-                        int startY = cachedStartY > 0 ? cachedStartY : invPage.inventory.yPositionOnScreen;
-                        Rectangle invArea = new Rectangle(startX, startY, 12 * slotSize, 3 * slotSize);
-
-                        if (invArea.Contains(touchPos))
-                        {
-                            touchStartY = touchPos.Y;
-                            dragStartScroll = currentScroll;
-                            isTouchHeld = true;
-                            isDraggingInventory = true;
-                        }
-                    }
-                }
-
-                // Interaksi beli tas 48 slot di meja Pierre
-                if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
-                {
-                    Vector2 clickedTile = e.Cursor.Tile;
-
-                    if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
-                    {
-                        if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
-                        {
-                            Helper.Input.Suppress(e.Button);
-
-                            var responses = new Response[]
-                            {
-                                new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
-                                new Response("NotNow", "Not now")
-                            };
-
-                            Game1.currentLocation.createQuestionDialogue(
-                                "Backpack Upgrade -- 48 slots",
-                                responses,
-                                new GameLocation.afterQuestionBehavior((farmer, answer) =>
-                                {
-                                    if (answer == "Purchase")
-                                    {
-                                        if (farmer.Money >= UPGRADE_PRICE)
-                                        {
-                                            farmer.Money -= UPGRADE_PRICE;
-                                            farmer.MaxItems = 48; // Buka 48 slot
-
-                                            Game1.playSound("reward");
-                                            Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
-                                        }
-                                        else
-                                        {
-                                            Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
-                                        }
-                                    }
-                                })
-                            );
-                        }
-                    }
+                    Helper.Input.Suppress(e.Button);
+                    int next = (currentPage == 1) ? 2 : 1;
+                    SwitchPage(next);
+                    return;
                 }
             }
-        }
 
-        private void OnButtonReleased(object sender, ButtonReleasedEventArgs e)
-        {
-            if (e.Button == SButton.MouseLeft)
+            // 2. Interaksi Beli Tas 48 Slot di Meja Pierre
+            if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
-                isTouchHeld = false;
-                isDraggingScrollbar = false;
+                Vector2 clickedTile = e.Cursor.Tile;
 
-                if (isDraggingInventory || !isDraggingScrollbar)
+                if (clickedTile.X == 7 && (clickedTile.Y == 18 || clickedTile.Y == 17))
                 {
-                    targetScroll = (currentScroll > 0.5f) ? 1f : 0f;
-                    isDraggingInventory = false;
-                    touchStartY = -1;
+                    if (Vector2.Distance(Game1.player.Tile, new Vector2(7, 18)) <= 3.5f)
+                    {
+                        Helper.Input.Suppress(e.Button);
+
+                        var responses = new Response[]
+                        {
+                            new Response("Purchase", $"Purchase ({UPGRADE_PRICE:N0}g)"),
+                            new Response("NotNow", "Not now")
+                        };
+
+                        Game1.currentLocation.createQuestionDialogue(
+                            "Backpack Upgrade -- 48 slots",
+                            responses,
+                            new GameLocation.afterQuestionBehavior((farmer, answer) =>
+                            {
+                                if (answer == "Purchase")
+                                {
+                                    if (farmer.Money >= UPGRADE_PRICE)
+                                    {
+                                        farmer.Money -= UPGRADE_PRICE;
+                                        farmer.MaxItems = 48; // Buka 48 slot
+
+                                        Game1.playSound("reward");
+                                        Game1.showGlobalMessage("Backpack Upgrade Complete! You now have 48 slots.");
+                                    }
+                                    else
+                                    {
+                                        Game1.drawObjectDialogue("You don't have enough money (Costs 50,000g).");
+                                    }
+                                }
+                            })
+                        );
+                    }
                 }
             }
         }
