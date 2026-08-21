@@ -173,12 +173,26 @@ namespace AndroidBackpackPaging
             }
         }
 
+        private void OrganizeAll48Slots()
+        {
+            // Kembalikan ke Halaman 1 dulu sebelum sortir agar urutannya rapi
+            if (currentPage == 2)
+            {
+                SwitchPage(1);
+            }
+
+            Ensure48Slots();
+            ItemGrabMenu.organizeItemsInList(Game1.player.Items);
+            Game1.playSound("Ship");
+        }
+
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
         {
             if (!Context.IsWorldReady || e.Button != SButton.MouseLeft) return;
 
             Point touchPos = Game1.getMousePosition();
 
+            // 1. Klik Tombol Merah Halaman di Menu Tas ATAU Menu Peti (Chest)
             if (Game1.player.MaxItems == 48 && (Game1.activeClickableMenu is GameMenu || Game1.activeClickableMenu is ItemGrabMenu))
             {
                 if (pageButtonBounds.Contains(touchPos))
@@ -190,6 +204,34 @@ namespace AndroidBackpackPaging
                 }
             }
 
+            // 2. DETEKSI KLIK TOMBOL SORTIR RESMI DI MENU TAS
+            if (Game1.activeClickableMenu is GameMenu gm && gm.currentTab == 0)
+            {
+                if (gm.GetCurrentPage() is InventoryPage invPage && invPage.organizeButton != null)
+                {
+                    if (invPage.organizeButton.containsPoint(touchPos.X, touchPos.Y))
+                    {
+                        Helper.Input.Suppress(e.Button);
+                        OrganizeAll48Slots();
+                        return;
+                    }
+                }
+            }
+
+            // 3. DETEKSI KLIK TOMBOL SORTIR DI MENU PETI (CHEST)
+            if (Game1.activeClickableMenu is ItemGrabMenu grabMenu && grabMenu.organizeButton != null)
+            {
+                if (grabMenu.organizeButton.containsPoint(touchPos.X, touchPos.Y))
+                {
+                    // Sortir isi tas bawah
+                    if (currentPage == 2)
+                    {
+                        SwitchPage(1);
+                    }
+                }
+            }
+
+            // 4. Beli Tas 48 Slot di Meja Pierre
             if (Game1.currentLocation?.Name == "SeedShop" && Game1.player.MaxItems == 36)
             {
                 Vector2 clickedTile = e.Cursor.Tile;
